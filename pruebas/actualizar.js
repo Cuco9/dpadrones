@@ -1,7 +1,7 @@
 // ACTUALIZAR UNA BASE VIEJA — lo que le pasa al VPS en cada despliegue.
 //
 // Por qué existe este banco: el 14 de agosto de 2026 se subió el trabajo del día
-// con las 569 comprobaciones en verde, y hubo que restaurar la salva. Todas esas
+// con todas las comprobaciones en verde, y hubo que restaurar la salva. Todas esas
 // comprobaciones arrancan SIEMPRE con una base recién creada; en el VPS hay una
 // base con meses de datos dentro que se actualiza. Eso no lo miraba nadie.
 //

@@ -20,19 +20,34 @@ Una caja que necesita internet para cobrar no sirve en Cuba.
 
 ## 0. Antes de nada: el dominio
 
-> ⚠️ **Sin decidir.** D´Padrones necesita **su propio dominio**. No sirve
-> `quinterosolar.org` ni ningún subdominio suyo: ese dominio está en producción
-> y es de otro cliente (`app.quinterosolar.org` es su aplicación y
-> `quinterosolar.org` redirige a `quinterosolar.com`). Meter aquí a D´Padrones
-> tumbaría la aplicación de Quintero o dejaría a un cliente entrando en la del
-> otro.
+La aplicación vive en **`dpadrones.quinterosolar.org`**, un subdominio nuevo.
 
-En el resto del documento, donde ponga `TU-DOMINIO` va el dominio que se compre
-(por ejemplo `app.dpadrones.com`). Cámbialo en todos los bloques antes de
-pegarlos, o pega esto primero en la sesión de MobaXterm y usa `$DOM`:
+**Es prestado.** `quinterosolar.org` es el dominio de otro cliente, y ahí dentro
+ya hay dos cosas funcionando que **no se tocan**:
+
+| Dirección | Qué es | Se toca |
+|---|---|---|
+| `quinterosolar.org` | redirige a `quinterosolar.com` | **no** |
+| `app.quinterosolar.org` | la aplicación de Quintero Solar | **no** |
+| `dpadrones.quinterosolar.org` | **esta aplicación** | sí |
+
+Comprobado el 28 de agosto de 2026: **no hay comodín** en el DNS de
+`quinterosolar.org`, así que añadir un subdominio nuevo no puede robarle tráfico
+a los otros dos. Y en nginx cada uno va en su propio archivo, con su
+`server_name`: el que no coincide, no entra.
+
+Lo que sí conviene saber: **el nombre del dominio se ve**. Quien mire la barra
+de direcciones va a leer «quinterosolar» en la aplicación de D´Padrones, y el
+día que Quintero Solar deje de ser cliente, este subdominio se va con él. El
+día que haya dominio propio, mudarse es cambiar el DNS, el `server_name` y
+pedir otro certificado: la aplicación **no lleva el dominio escrito por
+dentro**, usa el host de cada petición.
+
+Pega esto primero en la sesión de MobaXterm y el resto de los bloques ya salen
+solos:
 
 ```
-DOM=app.dpadrones.com     # <-- cambia esto
+DOM=dpadrones.quinterosolar.org
 echo $DOM
 ```
 
@@ -48,18 +63,26 @@ Hace falta además:
 
 ## 1. Que el dominio apunte al VPS
 
-En el panel de donde compraste el dominio, dos registros:
+En el panel de **quinterosolar.org**, dos registros **nuevos**. No toques los
+que ya están: `app` y la raíz son de Quintero Solar.
 
 | Tipo | Nombre | Valor |
 |---|---|---|
-| A | `app` (o `@`) | la IP del VPS |
-| AAAA | igual | la IPv6 del VPS, si tiene |
+| A | `dpadrones` | la IP del VPS (`144.172.92.186`) |
+| AAAA | `dpadrones` | la IPv6 del VPS, si tiene |
 
 Comprobarlo antes de seguir. Hasta que esto no conteste la IP buena, certbot
 va a fallar y no merece la pena intentarlo:
 
 ```
 nslookup $DOM
+```
+
+Y de paso, que los otros dos siguen donde estaban:
+
+```
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://quinterosolar.org/
+curl -s https://app.quinterosolar.org/api/salud; echo
 ```
 
 ---
@@ -150,7 +173,7 @@ server {
     listen [::]:80;
     server_name $DOM;
 
-    # Las fotos de los productos y las salvas viajan enteras: 30M da margue
+    # Las fotos de los productos y las salvas viajan enteras: 30M da margen
     # de sobra y evita el 413 que no dice nada útil.
     client_max_body_size 30M;
 

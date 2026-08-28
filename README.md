@@ -79,12 +79,25 @@ Las variables de entorno llevan el prefijo `DP_`: `DP_DB` (dónde vive la base),
 
 ## Lo que queda pendiente
 
-- **El logo y los iconos.** `public/img/` sigue teniendo los de Quintero Solar.
-  El logo de la cabecera y de los PDF se cambia desde **Ajustes → La empresa**
-  sin tocar código; los iconos de la aplicación instalada (`icono-192.png`,
-  `icono-512.png`, `icono-maskable-512.png`, `apple-touch-icon.png`) hay que
-  sustituirlos a mano por los de D´Padrones.
-- **El dominio.** Todavía sin decidir. `quinterosolar.org` **no vale**: está en
-  producción y es de otro cliente.
+- **El dominio es prestado.** La aplicación va en
+  `dpadrones.quinterosolar.org`, un subdominio del dominio de otro cliente. El
+  nombre se ve en la barra de direcciones, y si Quintero Solar deja de ser
+  cliente, el subdominio se va con él. Mudarse es cambiar el DNS, el
+  `server_name` y pedir otro certificado: **el dominio no está escrito dentro
+  del programa**, se usa el host de cada petición.
 - **Repasar con el dueño** las cuatro cosas que se heredaron de Quintero Solar
   y están al final de [DECISIONES.md](DECISIONES.md).
+
+## El logo
+
+`public/img/` lleva el monograma de D´Padrones: dorado sobre vino, la misma
+paleta que manda la aplicación. El dibujo está en
+[`public/img/marca.svg`](public/img/marca.svg) y de ahí salen las cinco piezas
+(`logo.png`, los tres iconos y el de iOS). Si algún día el dueño trae un logo
+de verdad:
+
+- El de la **cabecera, la pantalla de entrar y los PDF** se cambia desde
+  **Ajustes → La empresa**, sin tocar código ni desplegar.
+- Los **iconos de la aplicación instalada** sí son archivos: hay que
+  sustituirlos y **subir el `CACHE` de `public/sw.js`**, o los teléfonos que ya
+  la tengan puesta seguirán con el icono viejo.

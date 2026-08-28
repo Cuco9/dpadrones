@@ -6,7 +6,7 @@
 // llegaron a los teléfonos, mientras dábamos el trabajo por terminado. La
 // versión se ve al pie de Ajustes: si no coincide, ese aparato tiene código
 // viejo y no vale para probar nada.
-const CACHE = 'dp-v20260828-2';
+const CACHE = 'dp-v20260828-5';
 
 const ASSETS = [
   './',
@@ -14,7 +14,7 @@ const ASSETS = [
   './estilos.css',
   './app.js',
   './manifest.json',
-  './img/logo.jpg',
+  './img/logo.png',
   './img/icono-192.png',
   './img/icono-512.png',
   './img/icono-maskable-512.png',

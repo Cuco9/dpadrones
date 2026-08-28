@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  El logo de D´Padrones. De aquí salen las cinco piezas de esta carpeta.
+
+  Un monograma y nada más. No es pereza: este dibujo se ve casi siempre a 32
+  píxeles —la esquina de la cabecera— y en el icono de un teléfono entre otros
+  cuarenta. Lo que sobrevive a ese tamaño son dos letras gruesas con mucho
+  contraste; cualquier dibujo con detalle se convierte en una mancha.
+
+  Los colores son los que manda la aplicación: el vino de la marca y el dorado
+  del acento (ver la cabecera de public/estilos.css). El resplandor de arriba a
+  la derecha es el mismo gesto que hace la cabecera, para que el icono del
+  teléfono y la aplicación se reconozcan como parientes.
+
+  PARA REHACER LOS PNG, con Chrome en Windows:
+
+    set C="C:\Program Files\Google\Chrome\Application\chrome.exe"
+    %C% --headless=new --disable-gpu --screenshot=icono-512.png ^
+        --window-size=512,512 "file:///.../marca.svg"
+
+  y lo mismo con 192. Los dos que NO salen tal cual de aquí:
+
+    · icono-maskable-512.png — el sistema recorta un círculo, así que el
+      monograma va al 68% y los bordes se dejan vacíos. Sin eso, Android le
+      come las letras.
+    · apple-touch-icon.png (180) — sin esquinas redondeadas: iOS redondea él,
+      y si vienen ya redondeadas queda un borde blanco alrededor.
+
+  Y al cambiar cualquiera de ellos, **subir el CACHE de public/sw.js**: los
+  teléfonos que ya tengan la aplicación puesta se quedan con el icono viejo.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="vino" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"   stop-color="#55151f"/>
+      <stop offset=".55" stop-color="#6d1f2e"/>
+      <stop offset="1"   stop-color="#8a2a3c"/>
+    </linearGradient>
+    <radialGradient id="brillo" cx=".85" cy=".1" r=".75">
+      <stop offset="0"   stop-color="#d4a017" stop-opacity=".26"/>
+      <stop offset=".55" stop-color="#d4a017" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#vino)"/>
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#brillo)"/>
+
+  <text x="256" y="256" text-anchor="middle" dominant-baseline="central"
+        font-family="'Arial Black','Segoe UI',Arial,Helvetica,sans-serif"
+        font-weight="900" font-size="196" letter-spacing="-2"
+        fill="#e8c14b">DP</text>
+</svg>

@@ -16,6 +16,7 @@
   --rojo:#c0392b; --rojo-suave:rgba(192,57,43,.11);
   --ok:#149063; --ok-suave:rgba(20,144,99,.12);
 
+  --boton:#6d1f2e;
   --texto:#1d1114; --texto2:#6b5057; --texto3:#a08a90;
   --fondo:#f5f0f1; --tarjeta:#fff; --tarjeta2:#faf5f6;
   --borde:rgba(109,31,46,.10); --borde-fuerte:rgba(109,31,46,.18);
@@ -32,6 +33,10 @@
     --fondo:#150b0e; --tarjeta:#26141a; --tarjeta2:#361f26;
     --borde:rgba(255,255,255,.07); --borde-fuerte:rgba(255,255,255,.14);
     --acento-osc:#d4a017;
+    /* El vino de la marca sobre una tarjeta oscura es vino sobre vino, y el
+       botón principal se pierde. Un escalón más claro y ya se ve dónde hay
+       que tocar. En modo claro no hace falta: ahí el fondo es blanco. */
+    --boton:#9a3448;
     --sombra:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -16px rgba(0,0,0,.7);
     --sombra-alta:0 2px 8px rgba(0,0,0,.35), 0 20px 44px -18px rgba(0,0,0,.8);
   }
@@ -49,7 +54,7 @@ body{
 }
 .num,.tabular{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 
-/* ─── Cabecera: el verde del logo con un resplandor de sol ─── */
+/* ─── Cabecera: el vino de la marca con un resplandor dorado ─── */
 header{
   background:
     radial-gradient(120% 150% at 88% -30%, rgba(212,160,23,.30) 0%, rgba(212,160,23,0) 55%),
@@ -81,7 +86,6 @@ header .lema{font-size:11px;opacity:.78;margin-top:0}
   border-left:4px solid var(--marca-claro);background:var(--tarjeta)}
 .aviso1:active{background:var(--tarjeta2)}
 .aviso1.pedido{border-left-color:var(--acento)}
-.aviso1.opinion{border-left-color:var(--acento-osc)}
 .aviso1.stock{border-left-color:var(--rojo)}
 .aviso1 .t{font-weight:700;font-size:14px}
 .aviso1 .s{font-size:12.5px;color:var(--texto3);line-height:1.4;margin-top:2px}
@@ -180,7 +184,7 @@ input[type=checkbox],input[type=radio]{
 select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%238ba09b' stroke-width='2' stroke-linecap='round'/></svg>");
   background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
 input:focus,select:focus,textarea:focus{
-  outline:0;border-color:var(--marca-claro);box-shadow:0 0 0 3px rgba(13,138,118,.16)}
+  outline:0;border-color:var(--marca-claro);box-shadow:0 0 0 3px rgba(154,52,72,.16)}
 .dosCol{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 
 .btn{
@@ -190,7 +194,7 @@ input:focus,select:focus,textarea:focus{
   cursor:pointer;font-family:inherit;transition:transform .12s,box-shadow .15s,opacity .15s;
 }
 .btn:active{transform:scale(.975)}
-.btn.primario{background:var(--marca);border-color:var(--marca);color:#fff;
+.btn.primario{background:var(--boton);border-color:var(--boton);color:#fff;
   box-shadow:0 6px 16px -8px rgba(109,31,46,.7)}
 .btn.acento{background:var(--acento);border-color:var(--acento);color:#3d2c00;
   box-shadow:0 6px 16px -8px rgba(212,160,23,.75)}
@@ -215,7 +219,7 @@ input:focus,select:focus,textarea:focus{
 .prod:last-child{border-bottom:0}
 .prod:active{opacity:.6}
 .prod .cod{font-family:var(--mono);font-size:11px;font-weight:700;
-  color:var(--marca-claro);background:rgba(13,138,118,.11);
+  color:var(--marca-claro);background:rgba(154,52,72,.11);
   padding:5px 8px;border-radius:8px;flex-shrink:0;letter-spacing:.02em}
 .prod .info{flex:1;min-width:0}
 .prod .nm{font-size:14.5px;font-weight:650;line-height:1.3;
@@ -227,7 +231,7 @@ input:focus,select:focus,textarea:focus{
 .vacio{text-align:center;padding:32px 16px;color:var(--texto3);font-size:14px;line-height:1.6}
 
 /* ─── Modales ─── */
-.velo{position:fixed;inset:0;background:rgba(4,30,26,.55);backdrop-filter:blur(3px);
+.velo{position:fixed;inset:0;background:rgba(28,9,13,.55);backdrop-filter:blur(3px);
   z-index:60;display:none;align-items:flex-end;justify-content:center}
 .velo.abierto{display:flex;animation:aparece .18s ease}
 @keyframes aparece{from{opacity:0}to{opacity:1}}
@@ -242,7 +246,7 @@ input:focus,select:focus,textarea:focus{
 .modal .cerrar svg{width:17px;height:17px;stroke-width:2.2}
 
 .codigoGrande{font-family:var(--mono);font-size:27px;font-weight:800;letter-spacing:.05em;
-  text-align:center;background:linear-gradient(135deg,rgba(13,138,118,.09),var(--acento-suave));
+  text-align:center;background:linear-gradient(135deg,rgba(154,52,72,.09),var(--acento-suave));
   border:1px solid var(--borde);border-radius:14px;padding:16px;margin:14px 0 4px;
   color:var(--marca-claro)}
 .pista{font-size:12px;color:var(--texto3);line-height:1.55;margin:7px 0 2px}
@@ -316,8 +320,8 @@ input:focus,select:focus,textarea:focus{
   color:var(--texto3);border:1px solid var(--borde)}
 .accIco svg{width:14px;height:14px;stroke-width:2}
 .accIco.editar{background:var(--tarjeta2);color:var(--texto3)}
-.accIco.anadir{background:rgba(13,138,118,.12);color:var(--marca-claro);
-  border-color:rgba(13,138,118,.25)}
+.accIco.anadir{background:rgba(154,52,72,.12);color:var(--marca-claro);
+  border-color:rgba(154,52,72,.25)}
 .accIco.anadir svg{stroke-width:2.6}
 .prod:active .accIco{background:var(--marca);color:#fff;border-color:var(--marca)}
 .fichaProd{position:relative}
@@ -332,8 +336,6 @@ input:focus,select:focus,textarea:focus{
   display:flex;align-items:center;justify-content:center;overflow:hidden}
 .fotoPrev span{font-size:11px;color:var(--texto3);font-weight:600}
 .fotoPrev img{width:100%;height:100%;object-fit:cover}
-.miniFoto{width:38px;height:38px;border-radius:9px;object-fit:cover;flex-shrink:0;
-  background:var(--tarjeta2)}
 
 /* ─── Rejilla de productos de la caja ─── */
 .rejilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));
@@ -387,8 +389,8 @@ body.entrando #pantalla-entrar{position:fixed;inset:0;z-index:100;padding:22px;
   overflow-y:auto;display:flex;align-items:center;justify-content:center;
   background:
     radial-gradient(90% 60% at 85% 8%, rgba(212,160,23,.32) 0%, rgba(212,160,23,0) 60%),
-    radial-gradient(70% 50% at 10% 100%, rgba(18,165,140,.35) 0%, rgba(18,165,140,0) 60%),
-    linear-gradient(160deg, var(--marca-osc) 0%, var(--marca) 60%, #053e36 100%);
+    radial-gradient(70% 50% at 10% 100%, rgba(184,70,91,.35) 0%, rgba(184,70,91,0) 60%),
+    linear-gradient(160deg, var(--marca-osc) 0%, var(--marca) 60%, #8a2a3c 100%);
 }
 .entrarCaja{background:var(--tarjeta);border-radius:22px;padding:30px 24px 26px;
   width:100%;max-width:390px;text-align:center;box-shadow:0 30px 70px -20px rgba(0,0,0,.55)}
@@ -440,16 +442,6 @@ body.entrando header,body.entrando main,body.entrando nav{display:none}
 .mov .imp.mas{color:var(--ok)}
 .mov .imp.menos{color:var(--rojo)}
 
-/* ─── Servicios ─── */
-.serv{background:var(--tarjeta);border:1px solid var(--borde);border-radius:var(--r);
-  padding:16px;margin-bottom:11px;box-shadow:var(--sombra)}
-.serv .nm{font-size:15.5px;font-weight:750;letter-spacing:-.015em}
-.serv .pr{font-size:24px;font-weight:800;color:var(--marca-claro);
-  font-variant-numeric:tabular-nums;margin:7px 0;letter-spacing:-.03em}
-.serv .des{font-size:11.5px;color:var(--texto3);line-height:1.6}
-.serv .accs{display:flex;gap:8px;margin-top:13px}
-.serv .accs .btn{flex:1;padding:10px 12px;font-size:13px}
-
 /* ─── Proyectos ─── */
 .proy{background:var(--tarjeta);border:1px solid var(--borde);border-radius:var(--r);
   padding:15px 16px;margin-bottom:11px;box-shadow:var(--sombra);cursor:pointer;
@@ -463,7 +455,7 @@ body.entrando header,body.entrando main,body.entrando nav{display:none}
   letter-spacing:.07em;color:var(--texto3);font-weight:800;margin-bottom:2px}
 .proy .cifras b{font-size:14px;font-weight:750;font-variant-numeric:tabular-nums;
   letter-spacing:-.02em;overflow-wrap:anywhere}
-/* La barra de lo recuperado. Se pone verde oscuro al llegar al 100%: si se
+/* La barra de lo recuperado. Se pone verde al llegar al 100%: si se
    quedara igual, «va por el 98%» y «ya está» se leerían iguales de un vistazo. */
 .barra{height:9px;background:var(--tarjeta2);border-radius:20px;overflow:hidden;
   border:1px solid var(--borde)}
@@ -581,54 +573,6 @@ footer{text-align:center;font-size:10.5px;color:var(--texto3);padding:4px 14px 1
     font-size:8pt;color:#777;display:flex;justify-content:space-between}
   #impresion .nota{font-size:8.5pt;color:#777;margin-top:5px}
   .saltar{page-break-inside:avoid}
-
-  /* ─── El certificado de garantía ───
-     Es un papel OFICIAL de la empresa y se imprime como es el suyo, no como el
-     resto de informes de la aplicación: dirección arriba a la izquierda en
-     dorado, logo a la derecha, título centrado, la tabla con TODAS sus rayas
-     -se rellena a mano- y las dos firmas abajo. Por eso tiene sus propias
-     reglas y no reaprovecha .cab ni las tablas de arriba. */
-  #impresion .gar{font-size:11pt;color:#000;line-height:1.45}
-  #impresion .garCab{display:flex;align-items:flex-start;
-    justify-content:space-between;gap:16px}
-  #impresion .garDir{color:#e8a317;font-size:12pt;line-height:1.5}
-  #impresion .garLogo{height:52px;width:auto}
-  #impresion .garTit{text-align:center;font-size:17pt;font-weight:800;
-    margin:2mm 0 3mm;letter-spacing:.01em}
-  #impresion .garCampo{font-size:11pt;margin-bottom:1mm}
-  #impresion .garTexto{text-align:justify;margin:4mm 0 4mm}
-  /* El hueco que se rellena a mano o a máquina: una raya, no un espacio en
-     blanco, para que se vea que ahí falta algo. */
-  #impresion .garHueco{display:inline-block;min-width:60mm;
-    border-bottom:1px solid #000;height:1em;vertical-align:bottom}
-  /* La tabla del certificado no se parece a las de los informes: lleva TODAS
-     las rayas porque se rellena a mano, va un poco más estrecha que el texto y
-     su cabecera es negra y en minúsculas, como en el papel de ellos. Hay que
-     deshacer a mano lo que heredaría de #impresion th, que es gris, pequeña y
-     en mayúsculas. */
-  #impresion .garTabla{width:90%;border-collapse:collapse;font-size:10.5pt;
-    margin:0 auto;page-break-inside:avoid}
-  #impresion .garTabla th,#impresion .garTabla td{border:1px solid #000;
-    padding:1.2mm 2mm;height:6mm}
-  #impresion .garTabla th{text-align:center;font-weight:700;background:#fff;
-    color:#000;font-size:10.5pt;text-transform:none;letter-spacing:0}
-  #impresion .garTabla th:first-child{width:46%}
-  #impresion .garTabla th:nth-child(2){width:27%}
-  #impresion .garTabla td.c{text-align:center}
-  /* El final del certificado —las dos firmas, el aviso y el pie— va en un solo
-     bloque que NO se parte. El pie se estaba yendo él solo a una segunda hoja:
-     el papel quedaba completo y detrás una hoja con un teléfono y un correo.
-     Pasa cuando el trabajo lleva más materiales de los que caben en la tabla.
-     Con esto, si algo no cabe se van los tres juntos, que al menos se lee. */
-  #impresion .garCierre{page-break-inside:avoid}
-  #impresion .garFirmas{display:flex;justify-content:space-between;gap:20mm;
-    margin-top:8mm;font-size:10.5pt;page-break-inside:avoid}
-  #impresion .garFirmas>div{flex:1}
-  #impresion .garLinea{border-top:1px solid #000;width:55mm;margin-bottom:1.5mm}
-  #impresion .garAviso{text-align:center;font-style:italic;font-size:10.5pt;
-    margin:5mm 6mm 0}
-  #impresion .garPie{display:flex;justify-content:space-between;gap:10mm;
-    margin-top:5mm;font-size:10pt}
 }
 
 /* Casilla de verificar con su texto: se pulsa TODA, no solo el cuadradito.

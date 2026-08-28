@@ -251,12 +251,12 @@ function paginaDeInstalacion({ destino, huella }) {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>D´Padrones — instalar el sello</title>
 <style>
-  :root{--verde:#06564b;--verde-osc:#04413a;--sol:#f5b81c;--texto:#0d1c19;--texto2:#4a625d;
-        --tarjeta:#fff;--borde:rgba(6,86,75,.14)}
-  @media (prefers-color-scheme:dark){:root{--texto:#e6efec;--texto2:#a3bab5;--tarjeta:#0f221d;
+  :root{--marca:#6d1f2e;--marca-osc:#55151f;--acento:#d4a017;--texto:#1d1114;--texto2:#6b5057;
+        --tarjeta:#fff;--borde:rgba(109,31,46,.14)}
+  @media (prefers-color-scheme:dark){:root{--texto:#f0e7e9;--texto2:#bda8ad;--tarjeta:#26141a;
         --borde:rgba(255,255,255,.12)}}
   *{box-sizing:border-box}
-  body{margin:0;padding:22px 16px 60px;background:var(--verde);color:var(--texto);
+  body{margin:0;padding:22px 16px 60px;background:var(--marca);color:var(--texto);
        font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
   .caja{max-width:620px;margin:0 auto}
   h1{color:#fff;font-size:22px;margin:0 0 4px}
@@ -268,13 +268,13 @@ function paginaDeInstalacion({ destino, huella }) {
   ol{list-style:none;padding-left:0}
   .btn{display:block;text-align:center;text-decoration:none;font-weight:700;
        padding:15px;border-radius:13px;margin:6px 0}
-  .btn-sol{background:var(--sol);color:#3a2a00}
+  .btn-acento{background:var(--acento);color:#3d2c00}
   .btn-borde{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.35)}
   .huella{font:12px/1.5 ui-monospace,Consolas,monospace;color:var(--texto2);
           word-break:break-all;margin-top:8px}
   .nota{color:rgba(255,255,255,.62);font-size:13.5px;margin-top:18px}
 </style></head><body><div class="caja">
-<h1>☀ D´Padrones</h1>
+<h1>D´Padrones</h1>
 <p class="sub">Este aparato todavía no tiene el sello del negocio.</p>
 
 <div class="tarjeta">
@@ -285,7 +285,7 @@ function paginaDeInstalacion({ destino, huella }) {
   y el navegador enseña un aviso rojo cada vez.</p>
 </div>
 
-<a class="btn btn-sol" href="/sello-del-negocio.crt">1 · Descargar el sello</a>
+<a class="btn btn-acento" href="/sello-del-negocio.crt">1 · Descargar el sello</a>
 
 <div class="tarjeta">
   <h2>2 · Instalarlo</h2>

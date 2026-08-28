@@ -1334,7 +1334,7 @@ function bloquePorSitio() {
 // ─── El documento que se imprime ──────────────────────────────
 function cabeceraPDF(titulo, sub) {
   return `<div class="cab">
-    <img src="${MARCA.logo || 'img/logo.jpg'}" alt="">
+    <img src="${MARCA.logo || 'img/logo.png'}" alt="">
     <div><div class="t1">${esc(MARCA.nombre)}</div>
       <div class="t2">${esc(MARCA.lema)}${MARCA.lema ? ' · ' : ''}${esc(titulo)}</div>
       <div class="t2">${esc(sub)}</div></div>
@@ -3549,7 +3549,7 @@ function pintarMarca() {
   document.title = MARCA.nombre;
   document.querySelectorAll('.marca, header .nom').forEach(e => { e.textContent = MARCA.nombre; });
   document.querySelectorAll('.lemaGrande').forEach(e => { e.textContent = MARCA.lema; });
-  const logo = MARCA.logo || 'img/logo.jpg';
+  const logo = MARCA.logo || 'img/logo.png';
   document.querySelectorAll('header img, .logoGrande').forEach(e => { e.src = logo; });
   if ($('mk-nombre') && !$('mk-nombre').value) $('mk-nombre').value = MARCA.nombre;
   if ($('mk-lema') && !$('mk-lema').value) $('mk-lema').value = MARCA.lema;
