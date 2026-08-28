@@ -1,0 +1,10 @@
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+.env
+salvas/
+# bases de datos de prueba
+[a-z].db
+[a-z][0-9].db
+certs/

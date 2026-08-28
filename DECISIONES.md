@@ -1,0 +1,1437 @@
+# Decisiones de D´Padrones
+
+Este archivo existe para que dentro de tres meses nadie —ni yo— rompa algo sin
+saber por qué estaba hecho así. Cada decisión lleva el motivo.
+
+Casi todas nacen de los fallos reales de **La Inventería** el 10 de agosto de
+2026: un día entero persiguiendo inventarios que desaparecían, ventas infladas y
+arreglos que nunca llegaban a los teléfonos.
+
+## De dónde sale esta aplicación
+
+D´Padrones **nace de Quintero Solar**, otra aplicación del mismo autor, y se
+quedó con su motor entero: el stock calculado, los apuntes inmutables, el
+candado, la sincronización y las dos monedas. Lo que se quedó fuera, porque
+este negocio **solo vende mercancía**, es todo lo que servía para hacer
+trabajos de montaje:
+
+- los **servicios y los trabajos** (las plantillas y las cotizaciones),
+- los **clientes** y el **certificado de garantía**, que colgaban de ellos,
+- el **sitio web** entero —la tienda, el blog, los pedidos y las opiniones—,
+- la pantalla de **Productos**, que se juntó con la de **Almacén**: el
+  catálogo se ve y se edita desde donde se mira la mercancía.
+
+**Los números de las decisiones no se han recolocado.** Faltan la 14 a la 17,
+la 19, la 23, la 26 y la 34 porque hablaban de eso, y renumerar el resto
+dejaría mintiendo a los cientos de comentarios del código que las citan por su
+número. Un hueco es más barato de entender que una referencia falsa.
+
+---
+
+## 1. El stock NO se guarda. Se calcula.
+
+**La regla:** en ninguna parte hay un campo «este punto tiene 47 unidades». Hay
+una lista de **movimientos** (entrada, venta, merma, traslado, ajuste, conteo) y
+el stock es la suma de esa lista.
+
+**Por qué:** La Inventería guardaba el inventario como una foto (`invInicial`).
+Cuando dos aparatos guardaban esa foto, uno pisaba al otro y la mercancía
+desaparecía. Con varios aparatos por punto y sin internet, guardar el número es
+imposible de hacer bien.
+
+**Consecuencia:** juntar dos aparatos es **unir listas**. No hay que decidir
+quién gana. Da igual el orden y da igual cuántas veces se junte: el resultado es
+el mismo.
+
+## 2. Los movimientos son inmutables. Nada se borra ni se edita.
+
+Cada movimiento nace con un identificador único y ya no cambia nunca.
+¿Anular una venta? Se mete el movimiento contrario, apuntando al original.
+
+**Por qué:** si un movimiento se puede editar, vuelve el problema de quién
+tiene la razón. Además así el historial cuenta lo que pasó de verdad,
+incluidos los errores y sus correcciones.
+
+## 3. Cada dato tiene un dueño, y solo uno.
+
+| Dato | Dueño | Viaja |
+|---|---|---|
+| Ventas, mermas, gastos, cierres de un punto | ese punto | punto → principal |
+| Catálogo: productos, códigos, precios, comisiones | el administrador | principal → puntos |
+| Traslado: la salida del almacén | el almacén | almacén → punto |
+| Traslado: la recepción | el punto que recibe | punto → almacén |
+
+**Por qué:** sin internet no hay árbitro. Si dos sitios pueden cambiar lo mismo,
+tarde o temprano se contradicen. Con un solo dueño por dato eso es imposible.
+
+**El traslado tiene dos mitades** justamente por esto: el almacén dice «salieron
+20», el punto dice «recibí 18». Nadie corrige al otro; la diferencia queda a la
+vista como faltante en tránsito.
+
+## 4. Vender descuenta en el momento.
+
+Al escanear un producto se registra la venta y sale del stock. El conteo del día
+sirve para **detectar descuadres**, no para calcular las ventas.
+
+**Por qué:** en La Inventería las ventas se deducían del conteo al cerrar
+(`vendido = disponible − contado`). Eso hacía que apuntar mercancía después de
+cerrar el día **inventara ventas que no existieron**, con su ganancia y el
+salario del trabajador calculados sobre ellas.
+
+## 5. Un día cerrado no se toca.
+
+Si se intenta apuntar algo en un día ya cerrado, va al primer día abierto y se
+avisa. Nunca se modifica lo cerrado.
+
+**Por qué:** exactamente el fallo anterior. Y porque un cierre es un documento
+contable: si cambia después de firmado, no sirve para nada.
+
+## 6. No se vende lo que no está. Y si aun así pasa, se ve.
+
+**La caja no deja cobrar un producto sin existencia.** Lo decidió el dueño el
+12 de agosto, mirando su tienda física: allí no se puede vender lo que no está
+en el estante, y una caja que lo permite acaba con un inventario que no sirve.
+Lo comprueba el **servidor**, no la pantalla (decisión #10), y avisa al añadir
+al carro, no al final con el cliente delante.
+
+**El aviso dice qué hacer:** si la mercancía llegó y nadie la apuntó, lo que hay
+que hacer es **registrar la entrada en el Almacén**, no forzar la venta. Es lo
+que había que hacer de todas formas, y así el inventario deja de mentir.
+
+**Se puede abrir** (Ajustes → «Vender sin existencia»), porque hay negocios
+donde frenar la caja cuesta más que un descuadre. Viene cerrado.
+
+**Y aun cerrado, el stock puede quedar en negativo**, así que la app lo sigue
+enseñando: dos cajas sin internet pueden vender a la vez la última unidad, cada
+una con su comprobación en verde, y eso solo se ve al juntarlas. Es un hecho
+físico, no un fallo de datos. El Almacén tiene el filtro «En negativo» para
+encontrarlo.
+
+## 7. El número de versión del service worker sube en CADA cambio del front.
+
+En `public/sw.js`, la constante `CACHE`. Y la app enseña su versión al pie de
+Ajustes.
+
+**Por qué:** en La Inventería `sw.js` estuvo dos meses sin tocarse. El navegador
+solo avisa de que hay versión nueva cuando ese archivo cambia, así que **seis
+arreglos seguidos nunca llegaron a los teléfonos** mientras dábamos el trabajo
+por terminado. Se perdió medio día persiguiendo un fallo ya arreglado.
+
+**Y subir el número no basta: hay que poder forzarla desde la aplicación.** El
+navegador se trae el service worker nuevo cuando le parece y mientras tanto
+sigue sirviendo el código guardado. Recargar con `Ctrl+Shift+R` **no vale**: eso
+salta la caché del navegador, que es otra distinta de la del service worker. En
+una PC se arregla abriendo la consola; **en un teléfono no hay consola**, y la
+única salida era cerrar y abrir la aplicación varias veces a ver si sonaba la
+flauta. Pasó el 13 de agosto de 2026 con el dueño delante, y por eso ahora:
+
+- el servidor dice en `/api/salud` **qué versión del front está sirviendo**,
+  sacada del propio `sw.js`;
+- la aplicación la compara con la suya al arrancar y cada media hora, y si no
+  coinciden **avisa en la caja**, que es donde está la gente;
+- en Ajustes hay **«Buscar actualización»**, que compara y, si hace falta, tira
+  el service worker y sus cajas y recarga. Es de bruto y es lo único que
+  funciona siempre. No se pierde ningún dato: ahí solo hay archivos del
+  programa, nunca ventas ni inventario.
+
+**No se actualiza sola.** Recargar en mitad de un cobro, con el cliente delante,
+sería peor que esperar cinco minutos. El aviso se ve y decide la persona.
+
+## 8. Nada se carga de internet. Todo va dentro de la app.
+
+El lector de códigos por cámara, los tipos de letra, los iconos: todo local.
+
+**Por qué:** la app tiene que funcionar sin conexión. Una sola dependencia
+externa la deja inservible en el peor momento.
+
+## 9. Todo lo que se importa, se sube.
+
+Si entra un catálogo por archivo, la app lo manda al servidor en cuanto pueda.
+
+**Por qué:** en La Inventería importar un backup escribía solo en el teléfono.
+Resultado medido: **49 de 55 productos** de un punto existían únicamente en un
+aparato. Si se pierde ese teléfono, se pierde el catálogo.
+
+## 10. Los permisos los comprueba el SERVIDOR. Esconder un botón es decoración.
+
+Cada endpoint que cambia algo pide su permiso. La aplicación además esconde lo
+que ese cargo no puede hacer, pero eso es **comodidad, no seguridad**: cualquiera
+con el navegador abierto puede llamar al servidor directamente.
+
+Lo mismo con los números: quien no tenga `ver_ganancias` **no recibe los costos**.
+No se ocultan en la pantalla — no salen del servidor. Un dato que viaja al
+aparato ya es público.
+
+El cargo de Administrador no se puede editar. Si alguien le quitara permisos por
+error, nadie podría volver a entrar a arreglarlo.
+
+## 11. La marca de sincronización tiene que mirar TODAS las columnas que cambian.
+
+Al mandar solo lo nuevo desde la última vez, la trampa está en los cambios que
+**no tocan la fecha de creación**: anular una venta rellena `anulada_en`, y
+recibir un traslado rellena `recibido_en`, pero ninguno de los dos cambia
+`creado_en`. Si la marca mirara solo esa columna, esos cambios se quedarían
+fuera del paquete para siempre y el otro lado nunca se enteraría.
+
+Pasó de verdad en la prueba de la fase 8: los movimientos de la anulación
+viajaban, pero la venta seguía apareciendo como buena en la otra copia. Por eso
+`ventas` y `traslados` llevan **dos columnas de marca**.
+
+**Al añadir una tabla o una columna que se rellene después, hay que revisar
+esto.** Es el fallo más fácil de no ver, porque todo parece funcionar.
+
+## 12. Git desde el primer commit, y salva antes de cada despliegue.
+
+**Por qué:** La Inventería pasó semanas sin control de versiones y con código en
+el servidor que no estaba en ningún repositorio. Recuperarlo costó una sesión
+entera.
+
+## 13. El candado no es opcional, y por eso hay un sello del negocio.
+
+La aplicación va por **HTTPS**, con un certificado que se fabrica sola en la
+propia máquina. En los locales no hay internet, así que no se puede pedir uno
+de los normales: se crea una **autoridad propia** («el sello del negocio»,
+`certs/sello-del-negocio.crt`) que se instala **una vez** en cada aparato.
+
+**Por qué HTTPS, más allá de lo evidente:** sí, el PIN viajaba en claro por el
+WiFi del local y eso ya bastaba. Pero hay dos cosas que el navegador **prohíbe**
+fuera de una página segura, por muy bien que esté el código:
+
+- la **cámara**, o sea el escáner de códigos;
+- el **service worker**, o sea trabajar sin internet. Media aplicación.
+
+**Por qué una autoridad y no un certificado suelto:** con un certificado que el
+teléfono no reconoce, Chrome enseña el aviso rojo y **se niega a registrar el
+service worker**. Se puede pulsar «continuar» y ver la aplicación, pero se queda
+sin la parte de funcionar sin conexión — que es justo para lo que se hizo así.
+
+**Decisiones que hay dentro y conviene no deshacer:**
+
+- **Un solo puerto (3010) para las dos cosas.** Se mira el primer byte de cada
+  conexión: un saludo TLS empieza por `0x16`. Por `https://…:3010` va la
+  aplicación; por `http://…:3010`, la página que explica cómo instalar el sello.
+  Así quien escriba la dirección de siempre no ve un error incomprensible, y no
+  hay que abrir un segundo puerto en el cortafuegos.
+- **El sello no cambia nunca.** Si cambiara, habría que reinstalarlo en todos los
+  aparatos. El certificado del servidor sí se vuelve a emitir solo cuando cambian
+  las direcciones de la máquina (el router reparte otra) o cuando va a caducar.
+- **Dentro de un certificado, solo ASCII.** Un guion largo (—) en el nombre
+  descuadra el cálculo de longitudes y sale un archivo con pinta de certificado
+  que ningún navegador puede leer: *bad base64 decode*, y el servidor no arranca.
+  Pasó en el primer intento. Ahora se comprueba antes de guardar nada.
+- **La sincronización por red apunta el sello del otro y no acepta otro después**
+  (como SSH). Sin esto, con el candado puesto ninguna copia se fiaría de las
+  demás y la sincronización por red habría dejado de funcionar en silencio. Si
+  una copia se reinstala desde cero, hay que **olvidar su sello a mano** en
+  Ajustes: es un botón, no algo automático, para que sea decisión de alguien.
+- Lo que se apunta es el **sello**, no el certificado del servidor: ese se
+  reemite solo cada vez que cambia una dirección, y apuntarlo rompería la
+  sincronización cada dos por tres.
+- `DP_HTTP=1` arranca sin candado. Es una salida de emergencia y lo dice a
+  gritos al arrancar. `DP_CERTS` cambia dónde viven los certificados.
+
+**`certs/` no entra en git.** Dentro está la clave del sello: quien la tenga
+puede hacerse pasar por el servidor del negocio.
+
+## 18. La inversión es una lista de productos, y su recuperación se calcula.
+
+Una **inversión** es una compra de mercancía con nombre: qué se compró, a qué
+precio cada cosa y a qué almacén o punto va cada unidad. **El importe no se
+escribe**: sale de sumar las líneas. Cada inversión es independiente y lleva su
+propia cuenta de cuánto se ha recuperado.
+
+**No guarda ni una cifra de recuperación.** Se calcula de las ventas de esos
+mismos productos, igual que el stock se calcula de los movimientos (decisión
+#1). Si guardara «recuperado: 2 830», ese número y el inventario podrían
+contradecirse, y el día que se contradijeran no habría forma de saber cuál
+miente.
+
+**Nace en borrador y se registra.** Mientras es borrador se puede tocar; al
+registrarla entran los movimientos de mercancía en cada sitio y sale el dinero
+del fondo, y a partir de ahí **las líneas no cambian**: documentan lo que se
+compró y a qué costo. Corregirse es cancelar y hacer otra, que deja los
+movimientos contrarios a la vista. Un borrador que nunca se registró sí se
+borra: no llegó a pasar nada.
+
+**Lo que entra repone primero el costo; lo que sobra es ganancia.** Por eso se
+enseñan las dos cifras por separado: «recuperado del costo» y «ganancia
+encima». Vender por debajo del costo recupera menos y no genera ganancia, que es
+lo que pasa de verdad.
+
+**Cuentan las dos formas de que salga mercancía y entre dinero**: la venta
+directa en la caja y la que se lleva un trabajo. **La merma gasta unidades pero
+no recupera nada** —es pérdida, no dinero— y por eso se enseña aparte: «de 100
+quedan 60» sin decir que 10 se rompieron es un descuadre que nadie sabría
+explicar.
+
+**El mismo producto no puede estar dos veces en una inversión.** Al vender una
+unidad no se sabría a cuál de los dos costos apuntarla, y el porcentaje saldría
+distinto según cómo se mirara.
+
+**Una línea puede no llevar producto: entonces es DINERO con un concepto.** El
+transporte, un ayudante, la comida de la obra. No entra en el inventario porque
+no es mercancía, pero sale del fondo igual y cuenta en el importe. Se decidió el
+13 de agosto de 2026, cuando quedó claro que «saco 50 del fondo para el trabajo»
+no cabía en ningún sitio: eso empujaba a apuntarlo como gasto suelto, que es
+justo lo que se quería dejar de hacer. **El concepto es obligatorio**: dentro de
+un mes, «50» a secas no lo explica nadie.
+
+El importe sigue saliendo de las líneas, así que no hay dos formas de calcular lo
+mismo: una línea de dinero lleva cantidad 1 y su importe en el costo.
+
+**El costo del movimiento va en CUP y el de la inversión en su moneda.** El
+inventario entero vive en pesos; una inversión se puede hacer en dólares. Al
+registrarla se congela el cambio de ese día: dentro de un año esa compra siguió
+costando lo que costó.
+
+## 20. La aplicación se salva sola.
+
+Copia entera de la base de datos al arrancar y cada pocas horas
+(`DP_SALVAS_CADA`), guardando las últimas 30 y tirando las viejas. Se hace con
+el copiado en caliente de SQLite, que saca una copia coherente aunque en ese
+momento se esté cobrando algo; copiar el archivo con el explorador mientras la
+app trabaja puede dar una copia rota que parece buena hasta el día que hace
+falta.
+
+**Por qué:** la aplicación vive en la máquina de un local, sin nadie que la
+cuide, y esa máquina se apaga todos los días. La salva de arranque es la que
+garantiza que siempre haya una copia reciente aunque el programa no llegue a
+estar seis horas seguidas vivo.
+
+Las salvas **se ven en Ajustes** y se pueden descargar. Una salva que nadie ha
+mirado nunca es una salva en la que no se puede confiar el día que hace falta.
+Y hay que llevarse una **fuera de la máquina** de vez en cuando: una copia que
+vive en el mismo disco que el original no salva de que ese disco se rompa.
+
+**Nota aparte:** en esta aplicación casi nada se borra de verdad. Los
+movimientos son inmutables, anular mete el contrario, y los productos, clientes
+y plantillas se marcan como inactivos. Lo que las salvas protegen no es un
+borrado accidental —que casi no puede pasar— sino perder el archivo entero.
+## 21. El negocio se mide en UNA moneda, y cada venta congela su cambio.
+
+Hay dos cosas distintas que la aplicación no puede confundir:
+
+- **El efectivo**, que es lo que entra en cada gaveta. Los pesos son pesos y los
+  dólares son dólares, van separados y no se suman nunca. El fondo, el conteo de
+  billetes y el cobrado del día son esto.
+- **La medida del negocio**: los costos, el valor del almacén, las ganancias y
+  las comisiones. Eso tiene que estar en **una sola moneda**, o no se puede
+  restar un costo de un ingreso y la palabra «ganancia» no significa nada.
+
+Cuál es esa moneda lo decide el dueño en Ajustes (`ajustes.moneda_base`). Aquí
+se compra en dólares y se vende sobre todo en pesos, y el peso se devalúa por
+debajo: midiendo en pesos, un almacén que no ha cambiado parece valer más cada
+mes y las ganancias salen infladas por la inflación, no por vender mejor.
+
+**Cambiarla convierte lo guardado, de una vez.** Los costos de los productos, el
+de cada movimiento, y el costo y la comisión de cada venta. No se convierte al
+leer: si se hiciera así, las ganancias de un mes cerrado cambiarían cada vez que
+alguien tocara el valor del dólar. Por eso el botón avisa, pide el cambio, pide
+confirmar dos veces y manda hacer una copia antes. No tiene marcha atrás salvo
+recuperar esa copia.
+
+**Cada venta guarda el cambio de su día** (`ventas.tasa`). Una venta cobrada en
+pesos se mide en la moneda del negocio con el dólar que había ese día, no con el
+de hoy. Sin esto, subir el dólar en Ajustes movería las ganancias de todos los
+meses anteriores —incluidas las jornadas ya cerradas—, y un cierre es un
+documento contable: si cambia después de firmado, no sirve para nada
+(decisión #5).
+
+**Lo que NO se convierte:** las líneas de una inversión y las de una cotización,
+que llevan su propia moneda declarada. Esas siguen valiendo lo que decía el
+papel que se firmó.
+
+**Y al lado, siempre, la otra moneda.** Añadido el 14 de agosto de 2026 a
+petición del dueño: la medida es una sola, pero los totales que importan —la
+ganancia de la jornada, la del período, el valor del almacén— se enseñan también
+en la otra moneda entre paréntesis. Son el mismo dinero contado de dos formas y
+**no se suman jamás**; están para saber de cuánto se habla sin hacer la cuenta
+de cabeza.
+
+**Dos sitios donde esto se rompió, y hay que no repetirlos:**
+
+1. La casilla del costo de un producto convertía a **pesos siempre**, midiera el
+   negocio en lo que midiera. Con la medida en dólares, escribir un costo de 300
+   guardaba 36 000, el servidor lo leía como 36 000 dólares y la ganancia de cada
+   venta de ese producto salía absurda. No se ve en ninguna pantalla hasta que
+   las cuentas del mes no cuadran. Por eso ahora, además, **un costo por encima
+   del precio sale en rojo** en el catálogo: la aplicación no sabe cuál era el
+   número bueno y no lo inventa, pero sí puede decir cuál mirar.
+2. Las comisiones sumaban lo vendido con un `SUM(v.total)` de SQL, y ahí caían
+   juntas las ventas en pesos y las ventas en dólares. **Ninguna suma de dinero
+   se hace en SQL** si las filas pueden traer monedas distintas: se convierte
+   fila a fila, con el cambio congelado de cada venta.
+
+**En qué moneda se le paga a cada trabajador** es otra cosa y va aparte
+(`personas.moneda_pago`). La comisión se **mide** en la moneda del negocio,
+como todo; lo que hay que darle se enseña en la suya. Vacío = la del negocio, y
+no se guarda cuál es en ese momento: si mañana cambia la moneda del negocio,
+quien no eligió nada tiene que seguir cobrando en la que se mida entonces.
+
+## 27. Cada sitio tiene su gaveta, y el dinero se pasa en dos mitades.
+
+Pedido del dueño el 14 de agosto de 2026: «hay un fondo general que es el del
+almacén principal y debe haber un fondo individual por tienda; de ese fondo
+quiero poder pasar de una tienda a otra».
+
+**El saldo de un sitio es la suma de sus apuntes**, como todo lo demás en esta
+aplicación: no hay ninguna columna «saldo» que mantener (decisión #1). En un
+punto, la pantalla de Dinero enseña **su gaveta** —el dinero que quien está allí
+puede ir a contar a mano— y debajo, en pequeño, el del negocio entero. En el
+almacén principal manda el general, porque es el mirador (decisión #22).
+
+**Los apuntes que no son de ningún sitio** —retiros, inversiones y gastos del
+negocio— no se reparten entre los puntos. Si se repartieran, la gaveta de cada
+uno dejaría de cuadrar con el dinero que hay dentro, que es justo para lo que
+sirve. Van en su propia fila, «Del negocio».
+
+**Un traspaso son DOS apuntes**, no uno: un retiro donde estaba el dinero y un
+ingreso donde va, enlazados por el mismo `ref_id`. Es la misma forma que tiene
+un traslado de mercancía, y por el mismo motivo: los apuntes son inmutables
+(#2), cada lado escribe lo suyo, y el fondo general no se mueve porque las dos
+mitades se compensan.
+
+**Un traspaso no es dinero que entre ni salga del negocio.** Se marca con
+`ref_tipo='traspaso'` y queda fuera del resumen del período. Si contara, pasar
+100 de una tienda a otra saldría como 100 de ingresos y 100 de retiros, y el
+resumen del mes diría que entró dinero que no entró.
+
+**Las dos mitades van en la misma moneda.** Cambiar pesos por dólares no es
+pasar dinero de sitio: es una compraventa, con su cambio y su ganancia o su
+pérdida, y meterla aquí escondería esa cuenta dentro de un traspaso.
+
+**No se puede sacar más de lo que hay**, y al negarse se dice cuánto hay. Una
+gaveta en negativo no existe: significa que falta un apunte o que alguien se
+equivocó de sitio, y descubrirlo tres semanas después no lo arregla.
+
+## 22. El almacén principal es el mirador del negocio.
+
+Quien está en el **almacén principal** es quien lleva las cuentas de todo, así
+que desde allí las pantallas enseñan **todo el negocio sumado y, debajo, sitio
+por sitio**: en Cierre (la jornada y el período), en Dinero y en el Almacén.
+Estando en un punto no cambia nada: se ve lo de ese punto, que es de lo que
+responde quien atiende. Lo eligió el dueño el 13 de agosto de 2026.
+
+**No es una pantalla nueva.** Son las de siempre, contestando desde donde se
+está. Una pantalla más que aprender es una pantalla más que nadie abre.
+
+**Cuál es el almacén principal se decide en un solo sitio**: el primer almacén
+que se creó. Aquí hay tres (Principal, Iglesia y Brigada) y el servidor ya usaba
+esa regla para meter la mercancía que una inversión no reparte. Si la pantalla
+eligiera otro, la mercancía entraría en un almacén y se enseñaría en otro.
+
+**Lo que pasó y lo que hay son dos tablas distintas, nunca una.**
+
+| | Qué es | Ejemplos |
+|---|---|---|
+| **Lo que se movió** | un flujo: lo ocurrido entre dos fechas | vendido, ganancia, mermas, entradas, retiros |
+| **Lo que hay ahora** | un saldo: desde el principio hasta hoy | el dinero de cada gaveta, el valor del inventario |
+
+Juntarlas en una sola tabla sería la forma más rápida de que alguien lea «tiene
+90 000» donde pone «vendió 90 000». Por eso van separadas y cada una dice en su
+pie qué está contando.
+
+**El dinero que no es de ningún punto tiene su propia fila.** Los retiros, las
+inversiones y los gastos del negocio se apuntan sin sitio. Repartirlos entre los
+puntos dejaría la gaveta de cada uno sin cuadrar con el dinero que hay dentro de
+verdad, que es justo para lo que sirve: poder ir y contarlo. Por eso hay una
+fila «Del negocio», y por eso la suma de todas las gavetas es exactamente el
+saldo del fondo.
+
+**El total es la suma de las filas, sin atajos.** No hay una consulta aparte que
+calcule el total por su cuenta: se suman las filas que se están enseñando. Si
+algún día no cuadrara, se vería en la propia pantalla en vez de esconderse. Y se
+redondea al final, nunca cada fila: redondeando antes, las filas y el total
+dejarían de coincidir por unos pesos y no habría forma de explicarlo.
+
+**Quien no puede ver un número, no lo recibe** (decisión #10). Sin
+`ver_ganancias` no salen ni costos ni ganancias ni el valor del inventario; sin
+permiso sobre el dinero no sale ninguna gaveta —ni la fila «Del negocio», que es
+solo dinero—. No se esconden en la pantalla: no salen del servidor.
+
+**Y un apunte anulado no cuenta.** Se mira que el movimiento siga *en pie*, o
+sea que no anule a nadie y que nadie lo haya anulado a él. Mirar solo
+`anula_a IS NULL` deja pasar el anulado —la marca la lleva el contrario, no él—
+y la misma merma salía con dos cifras distintas según la pantalla desde la que
+se mirara.
+
+## 25. En Ajustes se entra por un índice, no por una lista de quince tarjetas.
+
+El 13 de agosto de 2026 el dueño lo dijo tal cual: «hay demasiadas opciones y me
+pierdo». Eran quince tarjetas seguidas y había que recorrer media pantalla para
+encontrar cualquier cosa. Ahora Ajustes abre en un **índice de cinco apartados**
+—El negocio, La gente, El sitio web, Copias y aparatos, Este aparato— y solo se
+ve el que se elige.
+
+**Un apartado del que este cargo no pueda ver ni una tarjeta no sale.** Y eso se
+decide mirando lo que ha quedado visible después de aplicar los permisos, no
+repitiéndolos en el botón del índice: así, al añadir mañana una tarjeta nueva,
+el índice sigue acertando solo.
+
+**De paso, dos tarjetas se llamaban «Copia de seguridad»** y eran cosas
+distintas: una guarda la base entera y la otra junta lo de dos aparatos. La
+segunda pasa a llamarse **«Juntar aparatos»**. Dos tarjetas con el mismo nombre
+en la misma pantalla es pedirle a alguien que se equivoque.
+
+## 24. Las ganancias se ven en Dinero, y cada una en su sitio.
+
+Hasta el 13 de agosto de 2026 las ganancias solo salían en Cierre, y el dueño no
+las encontraba. Ahora están en **Dinero**, con una fila por tienda o almacén y el
+total del negocio, como todo lo demás (#22).
+
+**Y desde el 14 de agosto, dentro de la tarjeta de cada sitio.** Estaban en su
+propia tabla, aparte del dinero de ese mismo sitio, y encima había una tercera
+tarjeta con el total del período del negocio entero. El período aparecía **tres
+veces en la misma pantalla** y ninguna se podía comparar con las otras: para
+saber qué había hecho una tienda —cuánto entró, en qué se fue y cuánto ganó—
+había que juntar tres trozos a ojo.
+
+Ahora es **una tarjeta por sitio con todo lo suyo**, y el negocio entero es la
+última, con la misma forma. Cada cosa se hace en una tienda; el total es la
+suma, y por eso va al final y no arriba. Lo pidió el dueño con esas palabras:
+«todas esas cosas se pueden hacer individualmente por cada tienda y se ven
+reflejadas como total en el almacén principal».
+
+**Una tarjeta y no una tabla:** son cinco conceptos de dinero en dos monedas más
+las tres cifras de la ganancia. En una tabla eso son doce columnas, y en un
+teléfono no se lee ninguna. Un concepto que está en cero en las dos monedas ni se
+pinta: llenar la tarjeta de ceros esconde el número que sí importa.
+
+**Es la ganancia BRUTA**: lo vendido menos lo que costó esa mercancía, más lo que
+dejó cada trabajo. No se le restan las comisiones ni lo que salió del fondo, y es
+a propósito: eso mezclaría el mes con compras que sirven para los meses
+siguientes, y la cifra dejaría de contestar la única pregunta que se le hace:
+¿este sitio gana dinero vendiendo?
+
+**Cada ganancia va donde se generó** (#19): la de las ventas y la de los
+materiales de los trabajos, en el sitio; la de la mano de obra, en la fila del
+negocio. Los trabajos cuentan por la fecha en que se **cobraron**, que es cuando
+entró el dinero, no por la del papel.
+
+## 28. Un aviso no es un dato: es una forma de mirar los que ya hay.
+
+Pedido del dueño el 14 de agosto de 2026: «que diga cuándo se recibió un pedido
+de la web, que avise cuando se recibe un comentario o una valoración».
+
+**No hay tabla de avisos.** Un pedido está pendiente si no tiene respuesta, una
+opinión si no tiene decisión, un mensaje si no está leído. Se calcula, como el
+stock (#1). Con una tabla habría dos verdades —la lista de avisos y el estado de
+verdad— y en cuanto se desincronizaran, la campanita estaría avisando de un
+pedido que alguien ya despachó en otro aparato.
+
+**Dos capas, y la de abajo es la que importa:**
+
+1. **La campanita**, con el número de cosas sin atender. Se ve al abrir la
+   aplicación, funciona sin internet, sin permisos y en cualquier teléfono.
+2. **El aviso del teléfono**, el que sale arriba con sonido. Hay que pedirlo y
+   solo llega con la aplicación abierta.
+
+Si la segunda no está, la primera sigue haciendo su trabajo. **Al revés no**, y
+por eso el aviso del sistema nunca es el único sitio donde se entera uno: un
+aviso que solo existe en la barra del teléfono lo borra cualquiera sin leerlo.
+
+**El permiso se pide con un botón, nunca al arrancar.** Preguntarlo nada más
+abrir es lo que hace que la gente le dé a «Bloquear» sin leer, y entonces ya no
+hay forma de volver a preguntarlo: hay que ir al candado de la barra de
+direcciones, que no va a hacer nadie.
+
+**Lo pinta el service worker** (`showNotification`) y no el constructor suelto:
+en Android el segundo no funciona dentro de una aplicación instalada, que es
+justo donde se usa. Y tocarlo **trae la aplicación a la pantalla** en vez de
+abrir otra copia, que dejaría dos ventanas de la caja con el carrito a medias en
+una de las dos.
+
+**«Esto ya te lo enseñé» es de cada aparato**, y por eso vive en el aparato. Si
+viviera en el servidor, el primero en verlo dejaría a los demás sin enterarse.
+Se apunta **aunque no haya permiso**: si no, el día que alguien lo diera saldrían
+de golpe veinte avisos viejos.
+
+**A quien no puede atender algo no se le avisa de ello.** Quien solo vende no
+recibe los pedidos de la web: avisar de algo que uno no puede tocar es la forma
+más rápida de enseñar a ignorar los avisos.
+
+**Lo que sabe solo el aparato lo pone el aparato**: la mercancía que se está
+acabando —del sitio donde se está, que al de al lado no le sirve— y la versión
+nueva. Lo del stock se recalcula **justo después de cobrar**, que es cuando
+sirve: quien está en el mostrador puede apuntarlo antes de que se le olvide.
+
+**Un mensaje se da por leído al abrir la lista.** No hay nada más que hacer con
+él aquí —se contesta por teléfono—, así que obligar a marcarlos uno a uno solo
+serviría para dejar la campanita encendida para siempre.
+
+## 29. Se puede borrar, y por eso está atado con cuatro nudos.
+
+Pedido del dueño el 14 de agosto de 2026. Va contra la decisión #2 —los apuntes
+no se editan ni se borran— y contra la #5 —un día cerrado no se toca—, y aun así
+tiene que existir: se ha estado probando la aplicación con datos inventados y
+hay que empezar con los de verdad. La alternativa era entrar a la base de datos
+del servidor a mano, que es mucho peor: allí nadie sabe qué se lleva por delante
+cada tabla.
+
+**Los cuatro nudos**, y ninguno sobra:
+
+1. **Solo el administrador.** No es un permiso que se pueda dar a un cargo, a
+   propósito: no hay ningún trabajo que necesite borrar el histórico.
+2. **Se hace una copia antes, siempre**, y se dice cómo se llama. Si la copia
+   falla, no se borra nada.
+3. **Hay que escribir la palabra BORRAR.** Un «¿seguro?» se pulsa sin leer; una
+   palabra hay que teclearla mirando.
+4. **Se enseña cuánto hay de cada cosa** antes de elegir. «¿Seguro?» no es una
+   pregunta si uno no sabe qué se está llevando por delante.
+
+**Los grupos no son las tablas: son las cosas como las entiende quien las
+borra.** «Ventas, mercancía y días» se lleva las ventas, los movimientos, los
+conteos, los días y los apuntes del fondo que salieron de una venta. Si fueran
+tablas sueltas, cualquiera dejaría un inventario que no cuadra con ninguna venta.
+
+**Y lo que arrastra a otra cosa se marca solo.** Borrar el catálogo dejando las
+ventas dejaría apuntes de productos que ya no existen. La pantalla marca lo que
+hace falta y lo dice; el servidor lo comprueba otra vez y lo rechaza si no viene
+(#10: esconder un botón es decoración).
+
+**Lo que NO se borra nunca desde aquí:** los sitios, el personal, los cargos y
+los ajustes del negocio. Sin eso no se puede ni entrar a la aplicación, y quien
+quiere empezar de cero quiere empezar a vender, no a configurar.
+
+**Aviso de las otras copias.** Borrar en un dispositivo no borra en los demás, y
+la próxima vez que se junten volverán a entrar los datos que ellos tengan. Se
+dice en la pantalla cuando hay más copias apuntadas. No se intenta arreglar
+solo: un borrado que se propaga por la sincronización es la forma más rápida de
+perder el negocio entero por un dedo torpe en el teléfono equivocado.
+
+---
+
+## 30. Un costo mal escrito se corrige con pruebas, no con un número inventado
+
+Entre el 12 y el 14 de agosto de 2026 la casilla del costo convertía a pesos
+**siempre**, midiera el negocio en lo que midiera. Con la medida en dólares,
+escribir 300 guardaba 120 000 y el servidor lo leía como 120 000 **dólares**. El
+código está arreglado desde `effd938`, pero **arreglar el código no repara lo
+que quedó escrito**: ese costo sigue en el catálogo, en los apuntes del
+inventario, en el costo congelado de cada venta y en el de cada trabajo. De ahí
+salían las ganancias en negativo que reportó el dueño.
+
+La primera respuesta fue marcarlo **en rojo** en el catálogo y dejar que él lo
+repasara a mano, con este argumento: *la app no sabe cuál era el número bueno, y
+ponerle uno inventado sería peor que el fallo*. El argumento sigue siendo
+válido; lo que estaba mal era la conclusión. **La app sí tiene la prueba de lo
+que costó de verdad**: la línea de la inversión con la que ese producto entró,
+que salió de una factura.
+
+Así que **Ajustes → El negocio → Repasar los costos** propone, en este orden:
+
+1. **Lo que costó según la última inversión registrada** de ese producto.
+2. Si nunca entró por una inversión, **deshacer la conversión de más**: el costo
+   guardado dividido por el valor del dólar, que devuelve exactamente la cifra
+   que se tecleó.
+3. Y siempre se puede **escribir el número a mano**, que es lo que manda.
+
+Nada se aplica solo. Los frenos son los mismos que los del borrado (#29): la
+palabra **CORREGIR** escrita, comprobada en el servidor y no solo en la
+pantalla; **copia de seguridad automática antes** y fuera de la transacción, de
+modo que si la copia falla no se toca un número; y todo dentro de una sola
+transacción, para que no queden unos productos arreglados y otros no.
+
+**Lo que arrastra, y por qué se arrastra.** Cambiar solo el catálogo dejaría las
+ganancias de atrás igual de mal. Así que con el mismo costo se corrigen:
+
+| Dónde | Qué se toca |
+|---|---|
+| `productos` | El costo y el de reposición, con la misma proporción |
+| `movimientos` | **Solo los apuntes que llevan EXACTAMENTE el costo malo** |
+| `ventas` | El costo se vuelve a **sumar** de sus líneas, no se escala |
+| `cotizacion_lineas` | Solo las líneas absurdas: costo por encima de lo cobrado |
+
+Las dos negritas son la regla: **aquí no se reescribe la historia, se corrige un
+error**. Si un producto entró tres veces a precios distintos, los otros dos eran
+correctos y no se tocan. Y el costo de una venta se vuelve a sumar de sus
+apuntes en vez de multiplicarlo por un factor, para que quede cuadrado aunque la
+venta llevara varios productos y solo uno estuviera mal.
+
+**Quién puede.** Ver la lista pide `ver_ganancias`, porque enseña los costos de
+todo el catálogo (#10). Corregir pide **además** `gestionar_productos`: cambia
+ganancias que ya están apuntadas.
+
+Probado de punta a punta en `pruebas/monedas.js`, reproduciendo el accidente
+real: producto a 600 USD con un costo de 120 000, su inversión de 300, una
+entrada y una venta hechas con el costo malo. Se comprueba que lo propone bien,
+que sin la palabra no toca nada, que la venta deja de costar más de lo que se
+cobró, y que **los apuntes de la inversión, que estaban bien, no se tocan**.
+
+---
+
+## 31. Editar un apunte de dinero es anularlo y volver a apuntarlo
+
+Pedido del dueño el 16 de agosto de 2026: «necesito poder editar y borrar los
+retiros, ingresos y gastos». Es lo mismo que pide cualquiera que se equivoque
+tecleando, y choca de frente con la decisión #2. La salida no es hacer una
+excepción: es que **por fuera se vea un botón de editar y por dentro no se
+reescriba nada**.
+
+**Anular es meter el MISMO tipo de apunte con el importe en negativo.** Parece
+un rodeo y es lo contrario. Todas las cuentas del negocio —el saldo del fondo,
+la caja de cada sitio, el resumen del período por tipo, el mirador del almacén—
+suman `importe` y le ponen el signo según el `tipo`. Un negativo del mismo tipo
+se cancela **solo, en todas ellas, sin tocar una sola consulta**. Con el apunte
+del tipo contrario el saldo también habría cuadrado, pero el mes habría quedado
+con un ingreso y un retiro que nunca existieron: el mismo enredo que obligó a
+apartar los traspasos de los resúmenes (#27).
+
+**Editar es anular y volver a apuntar**, las dos cosas dentro de una
+transacción. En la lista queda el apunte bueno y ya está.
+
+**La fecha del apunte contrario es la del original, no la de hoy.** Esto no es
+un hecho nuevo, es la corrección de un error: con la fecha de hoy, el mes en el
+que se apuntó mal se quedaría descuadrado para siempre y el de ahora arrastraría
+un dinero que no se movió. Lo que sí lleva la hora de ahora es `creado_en`, que
+es lo que cuenta **cuándo** se corrigió.
+
+**Solo los apuntes hechos a mano.** Los que vienen de una venta, de una
+inversión, de un trabajo o de un traspaso tienen otro dueño (#3): si se borrara
+aquí el dinero de una venta, el fondo diría una cosa y la venta otra, y ya no
+habría forma de saber cuál de las dos miente. Al pulsar se contesta **dónde se
+deshace cada uno**, que es lo que hace falta saber. Y una anulación no se anula:
+eso solo sirve para dejar el histórico ilegible.
+
+**En la lista no salen ni el apunte anulado ni su anulación**, porque suman cero
+y solo estorban a quien acaba de corregir algo. Salen marcando «Ver también los
+anulados», tachados: el histórico está entero y hay que poder mirarlo.
+
+De paso, dos cosas que faltaban en el mismo formulario: **la fecha** (era
+siempre hoy, así que un gasto de ayer apuntado esta mañana caía en el mes que no
+era) y **quién lo apuntó** (la ficha decía «Registrado por —» pasara lo que
+pasara, porque nadie rellenaba ese campo).
+
+### Y un cargo se da de baja, no se borra
+
+Segunda mitad del mismo pedido: se crearon cargos probando la aplicación y no
+había forma de quitarlos. Tres frenos:
+
+1. **El de administrador nunca.** Sin él nadie podría volver a entrar.
+2. **Un cargo que alguien tiene puesto no se va**, y se dice **quién** lo tiene.
+   Los permisos se leen del cargo en cada petición: si el cargo desapareciera,
+   esa persona se quedaría sin permisos de golpe y sin saber por qué.
+3. **La fila no se borra: se le pone la fecha de la baja**, como a los artículos
+   de la web. Una fila que desaparece no viaja en la sincronización, así que el
+   cargo volvería a salir en cuanto se juntaran dos copias.
+
+Lo que hizo la gente que tuvo ese cargo **no se toca**: los apuntes son suyos,
+no del cargo.
+
+`pruebas/correcciones.js`, **46 comprobaciones** de punta a punta. Las que
+importan son las que miran por caminos distintos: que el saldo vuelva
+*exactamente* a donde estaba, que el resumen del período no se quede con lo
+anulado, que la gaveta del sitio —que es otra consulta— cuadre igual, y que la
+baja del cargo **viaje en el paquete de sincronización**.
+
+---
+
+## 32. La comisión del día es del día, no de quien marcó la venta
+
+Pedido del dueño el 17 de agosto de 2026: «necesito poder poner el trabajador o
+trabajadores que trabajaron ese día para atribuirle las comisiones, el reparto
+será proporcional para cada trabajador del día a partes iguales».
+
+Hasta ahora la comisión de una venta era de quien la marcaba (`ventas.persona_id`).
+Suena justo y no lo es: **en el mostrador marca la venta quien tiene el teléfono
+en la mano**, no quien cargó la mercancía ni quien atendió al cliente. Con un
+aparato por punto, eso significaba que el sueldo variable de todo el día se lo
+llevaba una persona por un detalle de logística.
+
+**El reparto se hace por día y por sitio, a partes iguales.** Se suma la comisión
+de todas las ventas de ese día en ese sitio y se divide entre los apuntados.
+
+**Los días sin lista siguen contando como antes.** No es una concesión: es lo que
+permite desplegar el cambio sin tocar un solo día pasado. Los meses ya cerrados
+no tienen lista de gente, así que siguen diciendo exactamente lo que decían ayer.
+Si algún día se hubiera decidido «sin lista no hay comisión», el mes en curso se
+habría quedado a cero de golpe.
+
+**Lo vendido se sigue atribuyendo a quien despachó.** Son dos preguntas
+distintas —«¿quién atendió?» y «¿a quién le toca el dinero?»— y juntarlas en una
+sola cifra no contestaría ninguna de las dos.
+
+**La lista se apunta al cerrar la jornada**, que es el momento en que ya se sabe
+con certeza quién trabajó, y eligió ese sitio el dueño entre tres. Se puede
+guardar sin cerrar el día, para marcarla por la mañana.
+
+**Un día ya cerrado: solo el administrador puede corregir la lista, y sin
+reabrir la jornada.** Esto parece ir contra la #5 y no va: olvidarse de marcar a
+alguien significa que **esa persona no cobra**, y la alternativa —reabrir el
+día— es peor, porque un día reabierto vuelve a aceptar ventas, entradas y mermas
+con esa fecha. Cambiar la lista no mueve una unidad de inventario ni un peso de
+la caja: solo cambia entre cuántos se divide una comisión que aún no se ha pagado.
+
+**Desmarcar a alguien es poner `presente` en 0, no borrar la fila.** Una fila que
+desaparece no viaja en la sincronización: al juntar dos aparatos, la persona
+desmarcada volvería del otro lado y cobraría sin que nadie la hubiera marcado. Es
+la misma lápida que `cargos.borrado_en` y los artículos de la web.
+
+### Y pagar una comisión es dinero que sale de una caja
+
+Segunda mitad del mismo pedido: «necesito ver la estadística del dinero
+acumulado que ha cobrado cada trabajador en el mes». Eligió ver **las dos
+cifras**: lo que le toca y lo que ya se le entregó.
+
+Para saber lo entregado hay que apuntarlo, y apuntarlo de verdad: un pago de
+comisión es un **retiro del fondo** como cualquier otro. Si fuera un número
+guardado aparte, el saldo de la app diría que hay un dinero que ya no está.
+
+**El pago se apunta contra el MES que se paga, no contra el día en que sale el
+dinero.** La fecha del apunte es la de hoy —el dinero sale hoy—, pero `ref_id`
+lleva el mes (`2026-08`). Sin eso, pagar el 2 de septiembre la comisión de agosto
+dejaría agosto diciendo para siempre que no se ha pagado nada, y septiembre con
+una salida de dinero sin motivo.
+
+**Lo que queda se resta solo dentro de la misma moneda.** Si a alguien se le pagó
+parte en pesos y parte en dólares, no se inventa una conversión con el dólar de
+hoy para cuadrarlo: se enseñan los dos números y se dice que hay que verlo a mano
+(#21).
+
+**A quién se le paga va en una columna nueva, `fondo.beneficiario_id`**, y no en
+`persona_id`, que ya significa **quién apuntó** el movimiento y sale en la ficha
+como «Registrado por». Reutilizarla habría hecho que la ficha del pago dijera que
+lo registró la persona que lo cobró — exactamente el tipo de nombre reutilizado
+que ha costado tres fallos en esta aplicación (`por_pago`, `gaveta`, `c.total`).
+
+**El pago tiene dueño, así que no se toca desde Dinero** (#31): al intentarlo se
+dice que se deshace en Comisiones. Y su anulación **copia el `ref_tipo`**, porque
+si no, la suma de lo pagado no restaría la devolución y la app diría para siempre
+que alguien cobró un dinero que devolvió.
+
+### Y el valor del dólar lo pone solo el administrador
+
+Tercera parte del mismo día. Lo cambiaba cualquiera con permiso para editar
+productos, y ese número **no es un dato de un producto**: con él se calculan los
+precios en la otra moneda de todo el catálogo, lo que se cobra en la caja, el
+valor del almacén y las comisiones. Un cero de más puesto por quien estaba
+etiquetando mercancía mueve todas esas cifras a la vez y ninguna pantalla grita.
+Se cerró igual la **moneda del negocio**, que es peor todavía: reescribe todos
+los costos guardados y no tiene botón de deshacer. **Leer** el valor sigue
+abierto a todos: sin él, quien está en la caja no puede cobrar en la otra moneda.
+
+### Y cada uno se cambia su PIN
+
+Cuarta parte. Antes solo lo cambiaba el administrador —está escrito en el propio
+`server.js` que «es como debe ser»— y el dueño pidió lo contrario. Tiene razón
+práctica: el PIN lo pone el administrador al crear la cuenta, así que hay un rato
+en que **dos personas conocen la llave de un usuario**. Que cada uno se ponga el
+suyo al entrar cierra ese rato.
+
+**Hace falta el PIN de ahora** para cambiarlo: sin eso, un teléfono desbloqueado
+encima del mostrador es una cuenta regalada. **Se cierran las demás sesiones y no
+la propia**: cerrarlas todas te echaría de la aplicación al cambiar tu propio
+PIN, y no cerrar ninguna dejaría dentro para siempre al teléfono que se perdió.
+El administrador conserva su llave maestra, que es lo que hace falta cuando
+alguien olvida el PIN de verdad.
+
+`pruebas/comisiones.js`, **78 comprobaciones** de punta a punta. Las que importan
+son las que miran por otro camino: que **la suma de lo que cobra la gente sea
+exactamente la comisión del día** (repartir no puede inventar ni perder dinero),
+que el desmarcado **viaje en el paquete de sincronización**, que el saldo vuelva
+*al céntimo* al deshacer un pago, que la gaveta del sitio —otra consulta— baje
+igual, y que pagar en un mes lo de otro salga en el mes que se generó.
+
+---
+
+## 33. La ganancia no cambia de significado: debajo se enseña lo que cuesta la gente
+
+Preguntado por el dueño el 17 de agosto de 2026: «cuando se habla de ganancias,
+¿se está teniendo en cuenta restar las comisiones y salarios de trabajadores? eso
+debería salir en los desgloces». **No se estaba.** La ganancia era —y sigue
+siendo— lo vendido menos lo que costó la mercancía. La comisión se calculaba y se
+enseñaba **al lado**, sin restar, y los salarios solo existían como apuntes de
+dinero escritos a mano: bajaban el saldo de la caja y no aparecían en ninguna
+cuenta de ganancia.
+
+**No se cambia lo que significa «Ganancia».** Eligió que siga valiendo lo que
+vale y que debajo aparezcan las restas y un **«Queda después de la gente»**. Las
+dos cifras hacen falta y contestan preguntas distintas: la primera dice si se
+está vendiendo bien —si el margen del comercio es el que tiene que ser—, y la
+segunda dice si al final del mes sobra algo. Cambiar el número de arriba habría
+hecho que todas las cifras que el dueño ya tiene vistas bajaran de golpe, sin
+forma de comparar con lo de antes.
+
+**Se resta lo GENERADO en el período, no lo entregado**, y eso son dos sumas que
+no se pueden mezclar:
+
+- Las **comisiones** salen de las ventas de esas fechas, se hayan pagado o no.
+- Los **salarios y adelantos** no se generan solos en ningún sitio: existen
+  cuando alguien los apunta. Para esos, lo apuntado con fecha de esas fechas.
+
+Con lo entregado, un mes en que se pagaran dos meses atrasados saldría horrible y
+el mes anterior saldría regalado.
+
+**Y aquí está la trampa que hay que evitar: la comisión no se puede restar dos
+veces.** El pago de una comisión también es dinero para la gente. Si se sumara,
+se restaría una vez al generarse y otra al pagarse. Se deja fuera por su
+`ref_tipo`, y hay una prueba que paga una comisión y comprueba que el resumen del
+período **no se mueve**.
+
+**Qué es «dinero para la gente» lo dice una columna, `fondo.es_gente`, no una
+lista de palabras.** El subtipo lo escribe la persona: hoy hay «Salarios»,
+«Salario de jefe» y «salario», y mañana habrá «pago a los muchachos». Adivinar por
+el texto es exactamente lo que ya ha fallado tres veces aquí. La casilla viene
+**marcada de antemano** cuando el tipo de apunte ya lo dice, para que no dependa
+de que alguien se acuerde.
+
+Lo ya apuntado **sí se marcó leyendo el texto**, con una migración que corre **una
+sola vez** y deja su marca en `ajustes`. Sin esa marca volvería a correr en cada
+reinicio, y un apunte que el dueño hubiera decidido no contar se volvería a marcar
+solo cada vez que se reinicia el servidor.
+
+**La anulación de un salario copia la marca.** Sin eso, el negativo se quedaría
+fuera de la suma y un salario mal apuntado se seguiría restando de la ganancia
+para siempre. Es el mismo detalle que en los pagos de comisión.
+
+Sale en los cuatro desgloses: el **cierre de la jornada**, el **resumen del
+período**, la **tarjeta de cada sitio** del mirador del almacén y los **dos PDF**.
+En la tarjeta de un sitio solo aparece si hay algo que restar: una fila que dice
+«menos cero» en cada tienda es ruido.
+
+Comprobado en `pruebas/comisiones.js`: que la ganancia bruta **no se mueva** al
+apuntar un salario, que un gasto que no es de la gente no entre en esa cuenta, que
+anular un salario lo quite, que pagar una comisión no la reste dos veces, y que la
+suma de lo que queda en cada sitio dé el total del negocio.
+
+---
+
+## 35. Un permiso para cada cosa, atado al local, y el jefe metiéndose en la piel
+
+Pedido del dueño el 17 de agosto de 2026: «necesito mejorar el sistema de permisos
+disponibles para poner a los roles, necesito permisos para todo lo que existe en la
+aplicación y con un sentido lógico», «un trabajador de la tienda solo tendrá
+permisos permitidos dentro de esa tienda, no podrá tocar más nada que sea de otro
+sitio», y «el admin tiene la opción de ver la aplicación como lo haría ese
+trabajador con su rol y sus permisos y puede hacer lo mismo que él».
+
+### Eran 15 permisos para 112 puertas
+
+Uno solo abría media aplicación: `gestionar_dinero` daba a la vez ver la caja,
+mover dinero, corregir apuntes, pasar dinero entre cajas, las inversiones y pagar
+comisiones. No se podía tener a alguien que apunte gastos y no toque las
+inversiones. Y unas veinte pantallas de lectura estaban **abiertas a cualquiera
+que entrara**: el resumen del negocio, el catálogo con las existencias de todos los
+sitios, las cotizaciones, los traslados.
+
+Ahora son **más de cuarenta**, agrupados por áreas, y la regla al partirlos fue:
+**ver y hacer son permisos distintos, y lo que deshace algo va aparte de lo que lo
+hace**. Se puede cerrar la jornada sin poder reabrirla, que es donde se tapan los
+descuadres; se puede ver qué compras hay en marcha sin ver a qué precio se compró.
+
+**Los cargos que ya existían se traducen**, una sola vez, hacia lo que ya podían
+hacer: ni más ni menos. Un cargo que se quedara con permisos que ya no existen
+dejaría a esa persona sin media aplicación de un día para otro. Y `POST /api/cargos`
+**sigue aceptando los nombres viejos**: un dispositivo con el `app.js` viejo en su
+caché los manda así, y filtrarlos a secas dejaría el cargo vacío —o sea, a esa
+gente fuera— por haber tocado «Guardar».
+
+### El local: dos piezas, no una
+
+El **alcance** va en el cargo (`cargos.alcance`) y el **local de cada persona** en
+su ficha:
+
+- **`propio`** — vale en el local que tenga puesto la persona. Un mismo cargo
+  «Vendedor» sirve para todas las tiendas.
+- **`lista`** — vale en los locales marcados en el cargo (`cargos.sitios`), sea
+  cual sea el local de la persona. Es el «encargado de zona».
+- **`todos`** — sin límite.
+
+Las dos piezas hacen falta. Con el alcance **solo** en el cargo, un «Vendedor ·
+Tienda Centro» no serviría para el vendedor de otra tienda y habría que duplicar el
+cargo entero, con sus cuarenta permisos, y mantener las copias iguales a mano para
+siempre. Con el local **solo** en la persona, no se podría dar acceso a dos tiendas.
+
+Un cargo marcado `lista` **sin ningún local marcado no vale en ninguno**, ni en el
+de la persona. Lo contrario —valer en todos— sería justo lo que se quiso evitar al
+elegir esa opción, y nadie lo notaría hasta que alguien tocara la tienda de al lado.
+
+**Se comprueba en un middleware y no puerta por puerta.** Son más de cuarenta las
+que llevan un local, y la que se olvide es justo la que deja pasar. Se mira todo lo
+que llegue con nombre de sitio, en la dirección o en el cuerpo, **incluidas las
+líneas de un trabajo**: si solo se mirara el sitio del trabajo, se podría sacar
+mercancía del almacén escribiéndola en una línea.
+
+**Con `ver_negocio_entero` se puede MIRAR todo pero no escribir fuera de su local.**
+Son dos cosas distintas y el supervisor necesita la primera.
+
+### Hacerse pasar por un trabajador
+
+El motivo, en sus palabras: «no tengo claro lo que quiero que haga cada trabajador,
+necesito hacerme pasar por él para ir dando los permisos e irlos confeccionando poco
+a poco».
+
+**Dos identidades que no se confunden nunca:**
+
+- **Quien firma** sigue siendo el administrador. Lo que se apunte queda a su
+  nombre, porque el registro no puede mentir sobre quién hizo qué.
+- **De quién son los permisos** es el otro. Es lo que decide qué se puede hacer, y
+  también en qué local.
+
+Vive **en la sesión** y no en el dispositivo: si viviera allí, bastaría con no
+mandar el dato para recuperar los permisos de administrador, y esto no sería «ver
+como él» sino un adorno. Se vuelve a comprobar en cada petición, así que si le
+quitan el cargo de administrador mientras está dentro, deja de poder al momento.
+Y **no se puede entrar en la piel de otro administrador**: no enseñaría nada.
+
+Lo hecho en otra piel queda en la tabla **`actuaciones`** (quién firma, en la piel
+de quién, qué y cuándo). Contesta la pregunta «¿por qué el jefe apuntó esto a las
+once de la noche?». No viaja en la sincronización: es el diario de ese dispositivo,
+no un dato del negocio.
+
+### Y la pieza que hace útil todo lo demás
+
+**El 403 dice qué permiso falta, con su nombre en claro y de qué cargo se habla.**
+Al chocar con una puerta cerrada, el administrador ve el nombre exacto y un botón
+para **dárselo al cargo sin salir de donde está**. Sin eso tendría que adivinar cuál
+de los cuarenta era, y para cuando llegara a Ajustes ya no se acordaría.
+
+Se **apunta y se enseña en la tira de arriba**, en vez de saltar una ventana en el
+momento: entrar en una pantalla dispara varias peticiones a la vez, y con una
+ventana por cada una moverse por la aplicación sería contestar preguntas.
+
+Al dárselo se dice **a cuánta gente afecta**: se le da al CARGO, no a la persona, y
+eso sorprende si nadie lo avisa.
+
+### Un fallo que enseña algo
+
+El primer intento contestaba `200` al meterse en otra piel y **no aplicaba nada**:
+el `SELECT` de la sesión pedía `s.persona_id, p.*`, y `p.*` no trae las columnas de
+la sesión. La nueva se quedó fuera y `como_persona_id` era siempre `undefined`. Es
+la peor forma de fallar —sin error, diciendo que sí— y solo la cazó una prueba que
+comprobaba los permisos DESPUÉS de entrar, no la respuesta de entrar.
+
+`pruebas/permisos.js`, **61 comprobaciones**. Las que importan son las que mandan
+el local ajeno **a mano**, que es lo que haría cualquiera, y las que comprueban que
+en la piel de otro se cierran las puertas del administrador.
+
+---
+
+## 36. Las fotos no viajan dentro del catálogo
+
+Preguntado por el dueño el 17 de agosto de 2026: «¿por qué la app carga tan lento?
+cuando la abro demora en mostrar los valores y productos». Medido en su base:
+
+```
+60 productos · 37 con foto · 1 962 KB en total · la mayor 129 KB
+```
+
+**Casi 2 MB de fotos viajaban dentro del JSON del catálogo**, por el internet de un
+teléfono, en cada arranque de la aplicación y después de cada venta, antes de que se
+viera un solo precio.
+
+Y lo que lo escondía era un **`SELECT *`**: la columna `foto` se añadió después, así
+que se colaba en la respuesta sin que nadie tuviera que escribirla en ninguna parte.
+De ahí la lista explícita de columnas: lo que viaja al teléfono se decide a mano.
+
+Ahora el catálogo manda **`tiene_foto`** y cada imagen se pide por su propia
+dirección, `/foto-producto/:id?v=<fecha>`, con caché de un año. La dirección lleva la
+fecha de la última edición: así la caché puede ser eterna —esa versión de la imagen
+no cambia nunca— y al cambiar la foto cambia la dirección, que es lo que hace que el
+teléfono se entere sin preguntar.
+
+**Va fuera de `/api` a propósito.** Una etiqueta `<img>` no manda la cabecera del
+token, así que dentro de `/api` habría que meter el token en la dirección de cada
+imagen, y entonces quedaría escrito en el historial del navegador y en los registros
+del servidor — justo lo que el resto del programa evita. Que no pida sesión no abre
+nada nuevo: es una foto de mercancía, el mismo dato que el sitio web publica en
+internet, sin precios, costos ni existencias, y hace falta el UUID del producto, así
+que no se puede ir probando números para ver el catálogo.
+
+**El riesgo de este cambio era borrar las fotos, no la lentitud.** Al no venir la
+foto en el catálogo, la pantalla ya no la tiene en la mano cuando se edita un
+producto, así que al guardar no la manda. Si eso se leyera como «quítala», cambiarle
+el precio a un producto le borraría la foto y nadie lo notaría hasta mirar la tienda.
+Por eso **no mandar la foto y mandarla vacía significan cosas distintas**: sin el
+campo, el servidor deja la que hay; con el campo vacío, la quita, que es lo que hace
+el botón «Quitar». Hay una prueba que cambia un precio y comprueba que la foto sigue.
+
+De paso, al arrancar la aplicación pedía el valor del dólar y las denominaciones
+**en serie**, esperando a que contestara el primero. Ahora van a la vez: no dependen
+una de otra, y cada viaje son unas décimas por el móvil. El catálogo sí espera,
+porque necesita saber en qué moneda se mide el negocio para pintar los precios.
+
+`pruebas/materiales.js`: que el catálogo **no contenga ni un `data:image`**, que la
+foto se sirva como imagen y con caché larga, y que editar un producto no se la lleve.
+
+---
+
+## 37. El dinero que sale dice de qué caja, y se paga donde está el dinero
+
+Dos cosas pedidas por el dueño el 17 de agosto de 2026, nada más desplegar los
+permisos.
+
+### El sitio deja de ser opcional en lo que sale
+
+«Tanto en retiro como en inversiones y gasto necesito que donde dice sitio opcional
+sea obligatorio, y que no aparezca la opción *ninguno en concreto*.»
+
+Tiene razón, y esto **matiza la #22**. Allí se decidió que el dinero que no es de
+ningún punto —retiros, inversiones, gastos— fuera a una fila «Del negocio», para que
+**la suma de las gavetas siga siendo el saldo del fondo**. Eso sigue cumpliéndose: si
+todo lleva sitio, la suma cuadra igual, y además cada gaveta dice la verdad sobre el
+dinero que tiene dentro. Un retiro sin sitio dejaba la gaveta de la tienda diciendo
+que tenía un dinero que ya no estaba.
+
+**Un ingreso a mano sigue pudiendo no tener sitio**: un aporte de un socio puede no
+entrar por ninguna tienda. La regla es para lo que **sale**.
+
+**Los apuntes viejos sin sitio no se tocan** (#2): la fila «De la empresa» sigue
+existiendo con lo de antes y sumando lo que sumaba. Al **corregir** uno de esos sí
+hay que elegir caja, y eso es lo correcto — corregirlo es la ocasión de arreglarlo.
+
+Se comprueba **en el servidor**, en una función que usan los dos caminos —apuntar y
+corregir—, porque la vez que un criterio así se escribió dos veces, una de las dos
+copias se quedó sin él. La pantalla, además, viene con la caja del sitio en el que se
+está trabajando ya puesta: es de donde sale el dinero nueve de cada diez veces.
+
+En `pruebas/actualizar.js` hay un retiro **sin sitio a propósito**, sembrado con el
+código desplegado: es lo que comprueba que los apuntes viejos sobreviven a esto.
+
+### Y las comisiones se pagan en Dinero, no en Ajustes
+
+«La parte de comisiones que sale en ajustes, ¿está bien que vaya en ajustes? ¿no
+debería ir en un lugar más acorde?»
+
+No estaba bien. **Ajustes es donde se configura el negocio; pagarle a alguien es una
+operación de dinero.** La pantalla estaba ahí por cómo se construyó —junto a la lista
+de trabajadores, que es lo que hacía falta para calcularla—, no por dónde la buscaría
+alguien que va a pagar.
+
+Se mudó a **Dinero → Comisiones**, junto al fondo, las inversiones y los trabajos,
+que es donde está el dinero del que sale. En Ajustes → Personal queda **solo lo que
+sí es configuración**: quién trabaja, con qué cargo y **en qué moneda cobra**, con un
+aviso de dónde se paga.
+
+De paso, una petición menos de las doce que disparaba la pantalla de Ajustes al
+abrirse.
+
+`pruebas/pantallas.js` comprueba que el mes y la lista están **dentro** de la pantalla
+de Dinero: si se hubieran quedado en Ajustes, la pestaña saldría vacía y nadie sabría
+por qué. Y busca **dentro del apartado** de Ajustes, no en todo el archivo — al
+escribir esa prueba, un patrón suelto encontraba la lista en Dinero y pasaba sin
+comprobar nada.
+
+---
+
+## 38. El dinero sale de una caja de verdad, y solo si está dentro
+
+Dos cosas pedidas por el dueño el 21 de agosto de 2026, sobre la pantalla de
+inversiones:
+
+> «En inversiones quiero quitar la opción que dice sacar dinero del fondo del
+> negocio, solo quiero dejar que se pueda sacar dinero [de] los puntos que tengo:
+> tienda, almacén principal y brigada. Otro detalle: no me puede retirar dinero
+> del fondo si no existe el dinero, tiene que mostrarme un cartel de que no tengo
+> ese dinero y prohibírmelo.»
+
+### Se acabó «del fondo del negocio»
+
+Es el último resto del reparto viejo. La **#22** dio una fila «Del negocio» a lo
+que no era de ningún punto, para que la suma de las gavetas siguiera siendo el
+saldo del fondo; la **#37** ya quitó esa opción de los retiros, los gastos y los
+apuntes de inversión hechos a mano. **En la pantalla de inversiones seguía**, y
+además venía puesta por defecto.
+
+Ese «fondo del negocio» no es ninguna gaveta que se pueda ir a contar. Sacar de
+ahí es sacar de un montón que no existe, y deja la caja de la tienda diciendo que
+tiene un dinero que ya no está dentro.
+
+Ahora el desplegable arranca en **«Elige…»** y solo lleva sitios de verdad. Se
+comprueba **al guardar** y otra vez **al registrar**, porque un borrador de antes
+del 21 de agosto puede no llevar caja. **Lo ya registrado no se toca** (#2).
+
+**Lo que se conserva:** si la inversión va enlazada a un trabajo y no se elige
+caja, sigue saliendo de la caja de ese trabajo (#19) — el cobro entero vuelve
+ahí, así que es de donde tiene sentido que salga. La pantalla la propone al elegir
+el trabajo, pero solo si no había ninguna puesta: el dinero puede haberlo puesto
+otra tienda.
+
+### Una gaveta en negativo no existe
+
+Si sale, es que **falta apuntar un dinero que entró** o que alguien se equivocó de
+caja. Y a partir de ahí ninguna cifra del fondo se puede creer, porque el saldo ya
+no es el dinero que hay dentro. Por eso se prohíbe, y no se avisa nada más.
+
+Va en **una sola función**, `faltaDinero()`, que usan los **cinco** caminos por los
+que sale dinero: apuntar, corregir, registrar una inversión, pagar una comisión y
+el pase entre cajas. El pase ya lo comprobaba por su cuenta desde el principio;
+esa comprobación se sustituyó por la común en vez de dejar dos. La vez que un
+criterio así se escribió dos veces, una de las copias se quedó sin él.
+
+**Se mira por moneda.** Tener 500 USD no da para pagar 500 CUP: son dos gavetas, y
+sumarlas al valor del dólar sería inventar un cambio que nadie hizo.
+
+**Se mira el saldo de siempre**, no el del período que esté abierto en la pantalla:
+el dinero de la caja no sabe de fechas.
+
+**Sacar exactamente lo que hay sí se puede.** Dejar una caja en cero es normal;
+dejarla en negativo es imposible. El margen es de una diezmilésima, porque los
+saldos se guardan en coma flotante.
+
+### Dónde se para cada cosa, y por qué ahí
+
+| | Se para | Por qué |
+|---|---|---|
+| **Borrador de inversión** | solo si no dice la caja | un papel se puede preparar antes de tener el dinero |
+| **Registrar la inversión** | también si el dinero no está | registrar es el momento en que el dinero sale |
+| **Retiro, gasto, inversión a mano** | al apuntar | ahí sale |
+| **Corregir un apunte** | dentro de la transacción, **después de anular el viejo** | corregir un retiro de 100 por uno de 150 saca 50 más, no 150 |
+| **Pagar una comisión** | al pagar | |
+| **Pase entre cajas** | al pasarlo | ya lo hacía |
+
+**El caso de corregir es el que tenía trampa.** Si la comprobación se hiciera antes
+de anular el apunte viejo, el importe se contaría dos veces y una corrección legítima
+saldría rechazada. Y si al fallar se quedara escrita la anulación sin el apunte
+bueno, **corregir habría borrado**: el apunte malo desaparecido y el bueno sin
+entrar. Por eso la comprobación va dentro de la transacción y lanza, para que el
+rollback se lleve también la anulación. Hay prueba de las dos cosas.
+
+### El cartel dice el número, y qué hacer
+
+«En Tienda hay 1 200 CUP y estás sacando 1 500 CUP» — con la cifra, para poder
+arreglar el importe sin ir a buscarla. Y con la salida: **apúntalo primero como
+Ingreso en esa caja, o pásalo desde otra**. Un freno que solo dice que no deja a
+quien lo encuentra sin saber si la aplicación está rota.
+
+Al que pasa dinero de una caja a otra no se le puede aconsejar que lo pase de una
+caja a otra, así que el consejo es un argumento de la función y cambia según de
+dónde venga.
+
+**Y antes de llegar al cartel**, las dos pantallas enseñan debajo del desplegable
+**lo que hay en la caja elegida** — como ya hacía el pase entre cajas. En la
+inversión, además, avisa en rojo de cuánto falta según se van poniendo líneas. Si a
+quien mira no le dejan ver el fondo, no llega ninguna gaveta y no se enseña saldo
+ninguno: mejor eso que un cero que parece un saldo de verdad.
+
+### Lo que esto cambia en el día a día
+
+**El dinero que entra de fuera hay que apuntarlo.** Antes se podía comprar un
+contenedor sin que en ninguna caja hubiera con qué; ahora, si el dueño pone dinero
+suyo, o entra un préstamo, o cobra algo por fuera, eso se apunta como **Ingreso** en
+la caja que corresponda **antes** de la compra. Es la cuenta correcta y es lo que
+hace que la gaveta se pueda ir a contar; pero es un paso que antes no existía, y
+conviene saberlo antes de la primera compra grande.
+
+`pruebas/correcciones.js` (12 comprobaciones nuevas) y `pruebas/inversiones.js`
+(10 más) cubren el freno, el cartel, el rollback de la corrección y que la misma
+compra pase en cuanto se apunta el dinero.
+
+---
+
+## 39. Ver TODOS los sitios es un permiso; no verlos no es no ver nada
+
+Pedido por el dueño el 21 de agosto de 2026, el mismo día que la #38:
+
+> «En el permiso que dice mostrar todos los sitios, no solo el suyo: tengo un
+> trabajador que quiero que vea el fondo de la tienda que le asigné, pero con los
+> permisos para esa tienda no ve el fondo; y cuando le marco "ver todos los
+> sitios, no solo el suyo" ve el fondo de toda la empresa, y yo lo que necesito es
+> que vea solo el de su tienda, en la que está asignado.»
+
+Tenía razón, y el permiso estaba haciendo lo contrario de lo que dice su nombre.
+
+### Eran dos fallos que se tapaban el uno al otro
+
+**Uno: la pantalla de Dinero pide dos cosas a la vez.** El fondo y el desglose por
+sitio, en un `Promise.all`. El desglose exigía **«Ver TODOS los sitios»**, así que
+al encargado de una tienda esa puerta le contestaba 403, el `Promise.all` se caía
+entero y **la pantalla se quedaba en blanco**. No es que no viera el fondo: es que
+no veía nada, y desde fuera eso es idéntico a una aplicación rota.
+
+**Dos: ni el fondo ni el desglose filtraban nada.** El guardián de los locales
+(#35) mira el sitio que viaja **en la petición**, y una petición que no nombra
+ningún sitio pasa limpia. `/api/fondo` contestaba con **todas** las gavetas, todos
+los apuntes y el saldo del negocio entero a cualquiera que tuviera «ver la caja».
+Así que al darle «Ver TODOS los sitios» se le abría el desglose… y aparecía además
+todo lo demás, que ya estaba abierto desde antes.
+
+### Lo que se ve y lo que se toca son dos preguntas
+
+`sitiosDe()` dice **dónde puede tocar**. Ahora hay `sitiosQueVe()`, que dice **dónde
+puede mirar**: con «Ver TODOS los sitios», en todos; sin él, **en los suyos**. Y el
+filtro entra en las cuatro puertas que enseñan dinero o cuentas:
+
+| | Antes | Ahora |
+|---|---|---|
+| `/api/fondo` | todo, con solo «ver la caja» | sus cajas: lista, resumen, gavetas y saldo |
+| `/api/negocio` | 403 sin «ver todos», y si no, todo | sus filas, y el total es la suma de ellas |
+| `/api/resumen` | todo el negocio si no se pedía sitio | sus locales |
+| el `saldo` que contestan las demás | el del negocio | el de sus cajas |
+
+**El filtro entra en TODAS las consultas de una misma puerta.** Dejar una fuera
+enseñaría por un lado lo que se tapa por el otro, y eso es peor que no filtrar: la
+mitad de la verdad no se puede leer.
+
+**Y el total sigue siendo la suma de las filas que se enseñan** (#22). Se filtra
+antes de sumar, no después: filtrar las filas dejando el total entero daría una
+tabla en la que las cuentas no cuadran y nadie sabría por qué.
+
+**La fila «De la empresa» tampoco es suya**: su `sitio_id` es nulo, no está en su
+lista, y se va con las demás.
+
+### Dos permisos que llevaban desde el 17 sin existir
+
+Al partir `gestionar_dinero` en cinco (#35), **dos sitios se quedaron
+preguntando por él**, y desde entonces contestaban que no a todo el mundo:
+
+- **Las gavetas de `/api/negocio`** las abría `gestionar_dinero`, así que quien no
+  tuviera además `ver_ganancias` recibía **todas las cifras en blanco**. Ahora las
+  abre `ver_fondo`, que es el permiso que significa eso.
+- **El botón de corregir un apunte** (`se_puede_tocar`) lo mismo. Salía solo porque
+  el administrador pasa por delante de todos los permisos, así que **nadie lo
+  notó**: el único que lo usaba era el único al que no le afectaba.
+
+Es la clase de fallo que deja una migración grande: no rompe nada ruidosamente,
+solo apaga cosas para la gente que todavía no las estaba usando.
+
+### La pantalla tampoco ofrece lo que va a negar
+
+Al entrar, el servidor manda **`mis_sitios`** (null = todos), y con eso el
+desplegable de arriba y el del resumen enseñan **solo sus locales**. Ofrecer un
+sitio para que el servidor conteste 403 al elegirlo es prometer algo que no se va
+a cumplir.
+
+Si el sitio guardado en ese teléfono ya no es uno de los suyos —le cambiaron el
+local, o el cargo—, se pasa solo al primero que sí lo sea; si no, seguiría
+trabajando contra un sitio que el servidor le niega en cada petición.
+
+**`SITIOS` se queda entero a propósito**: hace falta para poner el nombre de un
+sitio ajeno cuando aparece en un traslado o en un apunte viejo. Lo que se filtra son
+los desplegables, no el diccionario de nombres.
+
+**Y la pantalla dice lo que está mirando.** Con `ver_todo` en falso, el saldo grande
+no se titula «Fondo general de la empresa» y el total de la tabla no dice «TOTAL DE
+LA EMPRESA». Enseñarle 40 000 bajo el rótulo «toda la empresa» sería mentirle sobre
+lo que tiene delante.
+
+**Además, el desglose ya no puede tumbar la pantalla**: se pide con su propio
+`catch`. Una puerta cerrada tiene que quitar su trozo, no la pantalla entera.
+
+`pruebas/permisos.js`, 17 comprobaciones nuevas: que el fondo se abre, que trae una
+sola gaveta, que el saldo es el suyo, que no hay ni un apunte de otro sitio, que el
+total cuadra con la fila, que las cifras llegan y no en blanco — y que al marcarle
+«Ver TODOS los sitios» pasa a verlo todo, que es lo que ese permiso significa.
+
+---
+
+## 40. No se rebaja mercancía que no está
+
+Pedido por el dueño el 22 de agosto de 2026:
+
+> «Lo que quiero corregir es en las mermas: la aplicación no puede dar mermas que
+> excedan las existencias. Si solo quedan 2 y la merma es 3 no puede ser, porque no
+> existe el producto para darle merma. He visto en varios sitios que hemos tenido
+> que corregir cosas similares: no se pueden rebajar dinero que no existe y no se
+> pueden rebajar productos que no existen.»
+
+Tiene razón en lo de «varios sitios», y esa es la parte importante. Es la misma
+regla de la **#38** —el dinero sale de una caja de verdad y solo si está dentro— y
+de la **#34** —no se cotiza lo que no está—, y las dos nacieron por separado. Esta
+la cierra para la mercancía y **la deja en un solo sitio**.
+
+### Un estante en negativo no existe
+
+Si sale, es que **falta apuntar una entrada** o que la cantidad está mal. A partir
+de ahí ninguna cifra del inventario se puede creer: ni lo que hay, ni lo que vale,
+ni la ganancia, que se calcula con el costo de una mercancía que no estaba. Una
+merma de 3 con 2 en el estante, además, **cuenta como pérdida un panel que nunca
+existió**: el negocio se apunta un dinero perdido que no perdió.
+
+### Va en UNA función, y por ella pasan los seis caminos
+
+`queFalta()` decide, `faltaMercancia()` escribe el cartel, y las usan **todos** los
+caminos por los que sale mercancía:
+
+| | Se para | Nota |
+|---|---|---|
+| **Merma** | al apuntarla | es lo que él pidió |
+| **Ajuste que resta** | al apuntarlo | contar no puede dar menos que nada |
+| **Venta** | al cobrar | ya lo hacía, con su propia copia; ahora usa la común |
+| **Despacho a otro punto** | antes de escribir nada | ya no lo comprobaba nadie |
+| **Material de un trabajo** | al guardar y al completar | ya lo hacía (#34); ahora comparte la cuenta |
+| **Cancelar una inversión** | al cancelar | mete el movimiento contrario de cada entrada |
+| **Conteo del cierre** | al cerrar el día | un conteo en negativo entraría como ajuste |
+
+La venta y los materiales **ya tenían el criterio escrito aparte**. No estaban mal;
+el problema es que eran dos copias de la misma regla, y en la #38 ya se vio adónde
+lleva eso: la copia que se queda sin la corrección es la que nadie mira. Ahora la
+venta llama a la misma función, y con eso desapareció su cuenta a mano de «lo que
+ya se apartó en esta misma venta».
+
+**Se agrupa por sitio y producto antes de comparar.** El mismo producto puede venir
+en dos líneas —dos tiradas de cable, dos renglones del mismo despacho— y mirar cada
+una por separado deja pasar un total que no cabe: 20 + 20 metros con 30 en el
+estante son dos líneas que caben y un envío que no.
+
+**Cada sitio mira SU estante.** Tener 10 paneles en el almacén no da para dar de
+baja 3 en la tienda: son dos estantes, igual que dos cajas no se suman aunque sean
+del mismo negocio (#38).
+
+**Sacar exactamente lo que hay sí se puede.** Dejar un estante en cero es normal;
+dejarlo debiendo es imposible. El margen es de una diezmilésima, porque las
+cantidades llevan decimales — el cable se vende por metros.
+
+**El freno va antes de escribir**, y en el despacho eso importa más que en ningún
+otro sitio: un traslado guardado a medias deja mercancía **en tránsito que nunca
+salió**, y el punto que la recibe la apunta como si hubiera llegado. Ahí sí se
+inventa mercancía de la nada.
+
+### Lo que NO se para
+
+**La devolución de una venta, el traslado que se cancela y el trabajo que se echa
+atrás** devuelven mercancía: entran, no salen. Y **el cierre del día con su ajuste**
+deja el estante exactamente en lo contado, que nunca es menos de cero.
+
+**La venta conserva su llave.** El ajuste «vender sin stock» (#6) sigue mandando
+solo en la caja, y sigue cerrado. Es el único camino con esa salida, y por una razón
+que no vale para los demás: con varios aparatos sin internet, dos cajas pueden
+vender la última unidad a la vez y solo se ve al juntarlas. La merma, el despacho y
+el ajuste los hace una persona mirando el estante, y ahí no hay carrera que valga.
+
+### El cartel dice la cifra, y qué hacer
+
+«De «Panel 450W» en Tienda Centro quedan 2, y estás sacando 3. No se puede rebajar
+mercancía que no está» — con el número, para poder arreglar la cantidad sin ir a
+buscarla, y con la salida: **apunta primero la entrada, y si ya se vendió o se usó
+en un trabajo, ya salió del inventario y no hay que darla de baja otra vez.**
+
+Y antes de llegar al cartel, la pantalla de la merma enseña **lo que hay en ese
+sitio** debajo del producto elegido, y lo pone **en rojo** en cuanto la cantidad se
+pasa — como el saldo de la caja en la #38 y como los materiales de un trabajo. La
+lista del despacho marca en rojo la línea que no cabe. La pantalla evita el viaje;
+el que dice que no sigue siendo el servidor (#10), porque desde otro dispositivo
+pueden haber vendido mientras tanto.
+
+### Lo que esto cambia en el día a día
+
+Igual que la #38 con el dinero: **lo que entra hay que apuntarlo**. Si llega
+mercancía y nadie la registra, la aplicación no dejará darle merma ni despacharla, y
+la salida no es forzarlo, es apuntar la entrada — que además era lo que había que
+hacer de todas formas.
+
+Y **una inversión cuya mercancía ya se vendió no se cancela**. Cancelarla saca del
+estante lo que entró con ella, y eso ya no está. Lo que sí se puede es apuntar la
+merma o la devolución de lo que quede.
+
+`pruebas/mermas.js`, 42 comprobaciones nuevas: la merma que se pasa, que al negarse
+no queda apuntada, que cada sitio mira el suyo, el estante en cero, el ajuste en los
+dos sentidos, el despacho que no deja traslado en tránsito, las dos líneas que se
+suman, la venta con el mismo producto repetido, el conteo en negativo, la inversión
+que ya no se puede deshacer — y que el criterio siga viviendo en una sola función.
+
+---
+
+## Lo que heredó de Quintero Solar y sigue sin confirmar
+
+Lo de aquí abajo se decidió con el dueño de **Quintero Solar**, no con el de
+D´Padrones. La aplicación está construida sobre estas cuatro cosas, así que
+conviene repasárselas con el cliente nuevo antes de darlas por buenas:
+
+- **Sin internet en los locales.** Cada aparato trabaja solo y la información se
+  junta después: cuando el aparato pilla internet, cuando pasan por el almacén,
+  o mandando un archivo por WhatsApp.
+- **Se escanea con la cámara** del teléfono o la tableta.
+- **Precio general con excepciones**: el administrador pone el precio de cada
+  producto y puede fijarle otro a un punto concreto.
+- **Varios aparatos por punto.** De aquí sale la decisión número 1.

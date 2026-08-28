@@ -1,0 +1,1723 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6d1f2e">
+<title>D´Padrones</title>
+<meta name="description" content="Inventario, ventas y contabilidad de D´Padrones. Funciona sin internet.">
+
+<!-- Para poder instalarla en el teléfono como una aplicación de verdad. Hace
+     falta: esto, un service worker con su «fetch» (sw.js), iconos de 192 y 512,
+     y HTTPS. Sin las cuatro cosas, el navegador no ofrece instalarla y nadie
+     dice por qué. -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="img/icono-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<!-- El iPhone no lee el manifiesto: se le dice lo mismo por su lado. El estilo
+     de la barra va en "default" a propósito — con "black-translucent" el
+     contenido se metería debajo de la hora y la batería, y esta aplicación no
+     tiene márgenes de seguridad puestos. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="D´Padrones">
+
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body class="entrando">
+
+<!-- ═══ VIENDO LA APLICACIÓN COMO OTRO (DECISIONES.md #35) ═══
+     Solo sale cuando el administrador se ha metido en la piel de un trabajador.
+     No puede faltar: en dos minutos se olvida que se está dentro de otra piel, y
+     lo que se apunta ahí es real. Debajo salen los permisos que le han faltado,
+     con un botón para dárselos a su cargo sin salir de aquí. -->
+<div id="tira-como" style="display:none"></div>
+
+<!-- ═══ ENTRAR ═══ -->
+<div id="pantalla-entrar">
+  <div class="entrarCaja">
+    <img src="img/logo.jpg" alt="" class="logoGrande">
+    <div class="marca">D´Padrones</div>
+    <div class="lemaGrande"></div>
+
+    <div id="form-entrar">
+      <label class="lbl">Usuario</label>
+      <input type="text" id="in-usuario" autocomplete="username" autocapitalize="none">
+      <label class="lbl">PIN</label>
+      <input type="password" id="in-pin" inputmode="numeric" autocomplete="current-password">
+      <label class="permiso" style="border:0;padding:10px 0 2px">
+        <input type="checkbox" id="in-recordar" checked> Recordar mi usuario en este dispositivo
+      </label>
+      <div id="in-error"></div>
+      <button class="btn primario ancho" style="margin-top:10px" onclick="entrar()">Entrar</button>
+      <button class="btn ancho" style="margin-top:8px;border:0;background:none;color:var(--texto3);font-size:13px"
+              onclick="verOlvide()">Olvidé mi PIN</button>
+    </div>
+
+    <!-- Recuperar con la clave -->
+    <div id="form-olvide" style="display:none">
+      <div class="aviso" style="text-align:left;margin-bottom:14px">
+        <b>Si eres un trabajador:</b> pídele al administrador que te ponga un PIN nuevo desde
+        Ajustes. Es cosa de un minuto.<br><br>
+        <b>Si eres el administrador:</b> usa la clave de recuperación que te dio la aplicación
+        cuando creaste tu usuario.
+      </div>
+      <label class="lbl">Tu usuario</label>
+      <input type="text" id="ol-usuario" autocapitalize="none">
+      <label class="lbl">Clave de recuperación</label>
+      <input type="text" id="ol-clave" placeholder="XXXX-XXXX-XXXX" autocapitalize="characters">
+      <label class="lbl">PIN nuevo</label>
+      <input type="password" id="ol-pin" inputmode="numeric">
+      <div id="ol-error"></div>
+      <button class="btn primario ancho" style="margin-top:12px" onclick="recuperarPin()">Cambiar mi PIN</button>
+      <button class="btn ancho" style="margin-top:8px;border:0;background:none;color:var(--texto3);font-size:13px"
+              onclick="verEntrar()">Volver</button>
+    </div>
+
+    <!-- La clave, al crear el administrador -->
+    <div id="form-clave" style="display:none">
+      <div class="aviso" style="text-align:left;margin-bottom:14px">
+        <b>Apunta esta clave y guárdala fuera del teléfono.</b> Es lo único que te deja
+        recuperar tu PIN si lo olvidas: nadie más puede devolvértelo, ni yo.
+      </div>
+      <div class="codigoGrande" id="clave-valor" style="font-size:23px">—</div>
+      <button class="btn ancho" style="margin-top:12px" onclick="copiarClave()">Copiar</button>
+      <button class="btn acento ancho" style="margin-top:8px" onclick="verEntrar()">Ya la apunté</button>
+    </div>
+
+    <div id="form-admin" style="display:none">
+      <div class="aviso" style="text-align:left;margin-bottom:14px">
+        Es la primera vez que se abre la aplicación. Crea el usuario del
+        <b>administrador</b>: será el único que lo vea todo y el que reparta los
+        permisos de los demás.
+      </div>
+      <label class="lbl">Tu nombre</label>
+      <input type="text" id="ad-nombre" placeholder="Ej: Ana Pérez">
+      <label class="lbl">Usuario para entrar</label>
+      <input type="text" id="ad-usuario" placeholder="Ej: yoel" autocapitalize="none">
+      <label class="lbl">PIN (4 números o más)</label>
+      <input type="password" id="ad-pin" inputmode="numeric">
+      <div id="ad-error"></div>
+      <button class="btn acento ancho" style="margin-top:14px" onclick="crearAdmin()">Crear administrador</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <img src="img/logo.jpg" alt="">
+  <div style="flex:1">
+    <div class="nom">D´Padrones</div>
+    <div class="lema" id="quien"></div>
+  </div>
+  <!-- La campanita. El número es lo que está sin atender AHORA, no lo que
+       alguien no ha leído: sale de los datos, así que no puede quedarse
+       avisando de algo que ya se atendió en otro dispositivo. -->
+  <button class="salirBtn" id="btn-avisos" onclick="abrirAvisos()" title="Avisos"
+          style="position:relative">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+    <span id="avisos-n" class="burbuja" hidden>0</span>
+  </button>
+  <button class="salirBtn" onclick="salir()" title="Salir">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+  </button>
+</header>
+
+<main>
+
+  <!-- ═══ CAJA ═══ -->
+  <section id="p-caja" class="pantalla activa">
+    <div class="sitioBarra">
+      <span>Vendiendo en</span>
+      <select id="sitio-actual" onchange="cambiarSitio()"></select>
+    </div>
+
+    <div class="buscador">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="caja-busq" placeholder="Código o nombre…" autocomplete="off">
+    </div>
+    <div class="filtros">
+      <select id="caja-cat" onchange="renderResultados()"><option value="">Todo</option></select>
+      <select id="caja-moneda" onchange="cambiarMonedaCaja()">
+        <option value="CUP">Cobrar en CUP</option>
+        <option value="USD">Cobrar en USD</option>
+      </select>
+      <button class="btn" style="flex:0 0 auto;padding:10px 13px" onclick="abrirEscaner('caja')"
+              title="Escanear codigo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><path d="M7 12h10"/></svg>
+      </button>
+      <button class="btn" style="flex:0 0 auto;padding:10px 13px" onclick="abrirContador('caja')"
+              title="Contar billetes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>
+      </button>
+    </div>
+
+    <!-- Hay versión nueva. Sale aquí, en la caja, por lo mismo que los otros dos
+         avisos: es donde está la gente. No se actualiza sola porque recargar en
+         mitad de un cobro sería peor que esperar cinco minutos. -->
+    <div class="tarjeta" id="aviso-version" style="display:none">
+      <div class="aviso" style="margin:0">
+        <b>Hay una versión nueva de la aplicación.</b>
+        Este dispositivo tiene la <b id="version-vieja">—</b> y en el servidor está la
+        <b id="version-nueva">—</b>. Se trae en unos segundos y hace falta internet.
+        <div class="btnFila" style="margin-top:10px">
+          <button class="btn primario" style="flex:1" onclick="traerVersionNueva()">Actualizar ahora</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tarjeta" id="carro-caja" style="display:none">
+      <h2>Venta en curso</h2>
+      <div id="carro"></div>
+    </div>
+
+    <div id="caja-resultados"></div>
+
+    <div class="totalBarra" id="barra-cobro" style="display:none">
+      <div>
+        <div class="tot-lbl">Total</div>
+        <div class="tot-num num" id="carro-total">0 CUP</div>
+      </div>
+      <button class="btn acento" onclick="abrirCobro()">Cobrar</button>
+    </div>
+  </section>
+
+  <!-- ═══ EL DÍA / PERÍODO ═══ -->
+  <section id="p-ventas" class="pantalla">
+    <div class="pestanas">
+      <button class="activa" onclick="pestanaInforme('dia',this)">Hoy</button>
+      <button onclick="pestanaInforme('periodo',this)">Período</button>
+    </div>
+
+    <!-- Período -->
+    <div id="t-periodo" style="display:none">
+      <div class="filtros">
+        <select id="rs-rango" onchange="rangoElegido()">
+          <option value="hoy">Hoy</option>
+          <option value="semana">Últimos 7 días</option>
+          <option value="mes" selected>Este mes</option>
+          <option value="mespasado">Mes pasado</option>
+          <option value="anio">Este año</option>
+          <option value="libre">Fechas a mano</option>
+        </select>
+        <select id="rs-sitio" onchange="cargarResumen()"></select>
+      </div>
+      <div class="filtros" id="rs-fechas" style="display:none">
+        <input type="date" id="rs-desde" onchange="cargarResumen()" style="padding:9px 10px;font-size:13px">
+        <input type="date" id="rs-hasta" onchange="cargarResumen()" style="padding:9px 10px;font-size:13px">
+      </div>
+      <div id="rs-contenido"></div>
+      <button class="btn acento ancho" style="margin-bottom:10px" onclick="imprimirResumen()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Exportar a PDF
+      </button>
+    </div>
+
+    <!-- El día -->
+    <div id="t-dia">
+    <div class="sitioBarra">
+      <span>Día</span>
+      <input type="date" id="dia-fecha" onchange="cargarDia()" style="flex:1;padding:8px 10px;font-size:13.5px">
+    </div>
+    <div id="dia-estado"></div>
+
+    <div class="tarjeta">
+      <h2>Arqueo de la jornada</h2>
+      <div class="fila"><span>Ventas</span><b class="num" id="v-cuenta">0</b></div>
+      <div class="fila"><span>Cobrado</span><b class="num" id="v-total">0 CUP</b></div>
+      <div class="fila" id="fila-efectivo"><span style="padding-left:12px;color:var(--texto3)">— efectivo CUP</span><b class="num" id="v-efectivo">0 CUP</b></div>
+      <div class="fila" id="fila-transf"><span style="padding-left:12px;color:var(--texto3)">— efectivo USD</span><b class="num" id="v-transf">0 USD</b></div>
+      <!-- De aquí para abajo ya no es efectivo, es la medida del negocio: todo
+           en la moneda que se haya elegido en Ajustes, con cada venta puesta al
+           cambio que tenía su día. -->
+      <div class="fila"><span>Vendido</span><b class="num" id="v-vendido">0</b></div>
+      <div class="fila"><span>Costo de lo vendido</span><b class="num" id="v-costo">0 CUP</b></div>
+      <div class="fila"><span style="font-weight:700">Ganancia bruta</span><b class="num" id="v-ganancia" style="color:var(--marca-claro)">0 CUP</b></div>
+      <!-- Lo que cuesta la gente, debajo de la ganancia bruta y restándose de
+           ella. La ganancia de arriba sigue siendo lo vendido menos la mercancía:
+           las dos cifras hacen falta, porque una dice si se vende bien y la otra
+           si al final del día queda algo (#33). -->
+      <div class="fila"><span>− Comisión de los vendedores</span><b class="num" id="v-comision">0 CUP</b></div>
+      <div class="fila" id="fila-sueldos"><span>− Salarios y adelantos del día</span><b class="num" id="v-sueldos">0 CUP</b></div>
+      <div class="fila"><span style="font-weight:700">Queda después de la gente</span><b class="num" id="v-queda" style="color:var(--marca-claro)">0 CUP</b></div>
+      <div class="fila"><span>Mermas</span><b class="num" id="v-mermas">0 CUP</b></div>
+      <div class="fila"><span>Entradas de mercancía</span><b class="num" id="v-compras">0 CUP</b></div>
+      <div class="fila"><span>Traslados (salieron / entraron)</span><b class="num" id="v-traslados">0 / 0</b></div>
+    </div>
+
+    <!-- Solo en el almacén principal: la jornada de todos los sitios -->
+    <div id="dia-negocio"></div>
+
+    <div class="tarjeta">
+      <h2>Ventas del día</h2>
+      <div id="lista-ventas"></div>
+    </div>
+
+    <div class="btnFila">
+      <button class="btn acento" style="flex:2" id="btn-cerrar-dia" data-permiso="cerrar_dia" onclick="abrirCierre()">Cerrar la jornada</button>
+      <button class="btn" style="flex:1" onclick="imprimirCuadre()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        PDF
+      </button>
+    </div>
+    </div>
+  </section>
+
+  <!-- ═══ ALMACÉN ═══ -->
+  <section id="p-almacen" class="pantalla">
+    <div class="sitioBarra">
+      <span>Inventario de</span>
+      <select id="sitio-almacen" onchange="cambiarSitioDesde('sitio-almacen')"></select>
+    </div>
+
+    <div class="btnFila" id="alm-acciones" style="margin-top:0;margin-bottom:12px">
+      <button class="btn primario" style="flex:1" data-permiso="gestionar_inventario" onclick="abrirMov('compra')">Entrada</button>
+      <button class="btn" style="flex:1" data-permiso="gestionar_inventario" onclick="abrirMov('merma')">Merma</button>
+      <button class="btn acento" style="flex:1" data-permiso="traslados_enviar" onclick="abrirDespacho()">Despachar</button>
+    </div>
+
+    <div id="transitos"></div>
+
+    <div class="buscador">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="alm-busq" placeholder="Buscar en el inventario…" autocomplete="off">
+    </div>
+    <div class="filtros">
+      <select id="alm-cat"><option value="">Todas las categorías</option></select>
+      <select id="alm-filtro">
+        <option value="con">Con existencia</option>
+        <option value="todos">Todo el catálogo</option>
+        <option value="bajo">Stock bajo o agotado</option>
+        <option value="negativo">En negativo</option>
+      </select>
+    </div>
+    <!-- Dos preguntas distintas: «qué hay en este estante» y «cuánto tengo de
+         esto en total, esté donde esté». Las dos hacen falta, y por eso no se
+         mezclan en un solo número. -->
+    <div class="filtros">
+      <select id="alm-alcance" onchange="cambiarAlcanceAlmacen()">
+        <option value="sitio">Solo lo que hay aquí</option>
+        <option value="todos">Todo el negocio, sumado</option>
+      </select>
+    </div>
+
+    <div class="tarjeta">
+      <h2><span id="alm-cuenta">—</span></h2>
+      <div id="alm-lista"></div>
+      <div class="fila" style="border-top:1.5px solid var(--borde);border-bottom:0;margin-top:6px;padding-top:11px">
+        <span style="font-weight:700">Valor del inventario</span>
+        <b class="num" id="alm-valor">0 CUP</b>
+      </div>
+      <div class="pista" id="alm-valor-nota"></div>
+    </div>
+    <!-- Crear un producto se hace AQUÍ, que es la única pantalla donde se ve la
+         mercancía. Antes vivía en una pantalla «Productos» aparte, y eso obligaba
+         a saltar entre dos listas que enseñaban lo mismo. Tocar cualquier fila de
+         arriba abre esa misma ficha para editarla. -->
+    <button class="btn primario ancho" style="margin-bottom:10px" data-permiso="gestionar_productos"
+            onclick="abrirFicha()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+      Nuevo producto
+    </button>
+    <button class="btn ancho" style="margin-bottom:10px" onclick="imprimirInventario()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Exportar el inventario a PDF</button>
+  </section>
+
+  <!-- ═══ DINERO ═══ -->
+  <section id="p-dinero" class="pantalla">
+    <div class="pestanas">
+      <button class="activa" onclick="pestanaDinero('fondo',this)">Fondo</button>
+      <button onclick="pestanaDinero('inversiones',this)">Inversiones</button>
+      <!-- Las comisiones estaban en Ajustes, y ahí no era su sitio: pagarle a
+           alguien es una operación de dinero, no un ajuste (DECISIONES.md #37). -->
+      <button data-permiso="ver_comisiones" onclick="pestanaDinero('comisiones',this)">Comisiones</button>
+    </div>
+
+    <!-- Fondo -->
+    <div id="t-fondo">
+      <!-- Dos cifras que no son la misma y se confundían: el dinero que hay
+           EN ESTE SITIO —la caja, que se puede ir a contar a mano— y el del
+           negocio entero. En un punto manda la primera; en el almacén principal
+           las dos coinciden con lo que se espera, porque es el mirador. -->
+      <div class="tarjeta">
+        <h2 id="fo-titulo-saldo">Saldo del fondo</h2>
+        <div style="text-align:center">
+          <div class="saldo num" id="fo-saldo">0 CUP</div>
+          <div class="saldo num" id="fo-saldo-usd" style="font-size:26px;color:var(--acento-osc)">0 USD</div>
+        </div>
+        <div id="fo-general" class="pista" style="text-align:center;margin-bottom:12px"></div>
+
+        <!-- Los cuatro botones juntos, que es lo que se viene a hacer aquí.
+             Estaban repartidos en tres alturas distintas de la pantalla —uno
+             debajo del saldo, dos en una fila y el de ingreso metido entre los
+             filtros— y había que buscarlos. -->
+        <div class="btnFila" style="margin-top:0" data-permiso="mover_dinero,traspasos">
+          <button class="btn" style="flex:1" onclick="abrirFondo('ingreso')">Ingreso</button>
+          <button class="btn" style="flex:1" onclick="abrirFondo('retiro')">Retiro</button>
+          <button class="btn" style="flex:1" onclick="abrirFondo('gasto')">Gasto</button>
+        </div>
+        <button class="btn ancho" style="margin-top:8px" data-permiso="traspasos"
+                onclick="abrirTraspaso()">Transferencia a otro sitio</button>
+
+        <!-- Aquí había un botón «Inversión» que solo apuntaba la salida de
+             dinero: ni lista de lo que se compró, ni aparecía en la pestaña
+             Inversiones. Hacía la mitad y confundía. -->
+        <details class="pista" style="margin-top:10px" data-permiso="ver_fondo">
+          <summary style="cursor:pointer">¿Y si el dinero es para comprar mercancía?</summary>
+          Eso es una <b>inversión</b> y se apunta en la pestaña de al lado, con la lista de
+          lo que compraste y a qué sitio va cada cosa: así se ve lo que llevas puesto y lo
+          que vas recuperando. Las dos monedas de arriba van por separado y no se convierten.
+        </details>
+      </div>
+
+      <!-- TODO el período va aquí, sitio por sitio, y en ningún otro lado.
+           Antes estaba tres veces: una tarjeta con el total del negocio, otra
+           con las ganancias por sitio y una tercera con el dinero por sitio.
+           Para saber qué había hecho una tienda había que juntar tres sitios de
+           la pantalla a ojo, y el total de arriba no se podía comparar con nada.
+
+           Y cada sitio se enseña PLEGADO: con cuatro tiendas de diez líneas
+           cada una había que bajar media pantalla para llegar al total. En una
+           línea se ve el nombre, lo que le quedó y lo que tiene en la caja;
+           quien quiera el detalle, lo abre. -->
+      <!-- El período: no basta con «hoy / este mes / todo». Hace falta poder
+           mirar un día de la semana pasada o el mes de junio, y eso con un
+           desplegable de tres opciones no se puede. Las flechas mueven el
+           período entero hacia atrás y hacia delante, que es como se mira de
+           verdad: «¿y el mes pasado?», «¿y el anterior?». -->
+      <h2 style="margin:16px 0 8px">Detalle por sitio</h2>
+      <div class="filtros" style="align-items:center">
+        <button class="btn" id="fo-antes" onclick="moverPeriodo(-1)"
+                style="flex:0 0 auto;padding:9px 13px" title="El anterior">‹</button>
+        <select id="fo-periodo" onchange="cambiarPeriodo()" style="flex:1">
+          <option value="dia">Un día</option>
+          <option value="semana">Una semana</option>
+          <option value="mes" selected>Un mes</option>
+          <option value="ano">Un año</option>
+          <option value="rango">Entre dos fechas</option>
+          <option value="todo">Desde el principio</option>
+        </select>
+        <button class="btn" id="fo-despues" onclick="moverPeriodo(1)"
+                style="flex:0 0 auto;padding:9px 13px" title="El siguiente">›</button>
+      </div>
+      <div class="filtros" id="fo-fechas" style="display:none">
+        <input type="date" id="fo-desde" onchange="cargarFondo()">
+        <input type="date" id="fo-hasta" onchange="cargarFondo()">
+      </div>
+      <div class="pista" id="fo-cual" style="margin-top:-4px;font-weight:700;
+           color:var(--texto2)"></div>
+      <div id="fo-sitios"></div>
+      <div class="pista">Lo de la caja no es del período: es el dinero que hay ahí hoy,
+        contando desde el principio. Los traspasos entre sitios van aparte porque para el
+        negocio no son dinero que entre ni salga: cambia de caja.</div>
+
+      <details class="tarjeta plegable">
+        <summary>
+          <div class="nmPleg">Movimientos<small id="fo-cuenta">del período de arriba</small></div>
+        </summary>
+        <div class="cuerpoPleg">
+          <!-- Un apunte anulado y su anulación suman cero, así que en la lista
+               solo estorban. Pero el histórico está entero y hay que poder
+               mirarlo: por eso el interruptor, y no un borrado. -->
+          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;
+            color:var(--texto3);margin:0 2px 10px;cursor:pointer">
+            <input type="checkbox" id="fo-ver-anulados" onchange="cargarFondo()">
+            Ver también los anulados
+          </label>
+          <div id="fo-lista"></div>
+          <button class="btn ancho" style="margin-top:10px" onclick="imprimirFondo()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Exportar el fondo a PDF</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- Inversiones -->
+    <div id="t-inversiones" style="display:none">
+      <div class="pista" style="margin:0 2px 12px">Una inversión es una compra de mercancía:
+        qué compraste, a qué precio cada cosa y a qué almacén o punto va. Después, según se
+        va vendiendo, aquí se ve cuánto has recuperado del costo y cuánto es ganancia.</div>
+      <div class="filtros">
+        <select id="iv-filtro" onchange="cargarInversiones()">
+          <option value="activas">Sin cancelar</option>
+          <option value="todas">Todas</option>
+        </select>
+      </div>
+      <div id="iv-lista"></div>
+      <button class="btn primario ancho" data-permiso="gestionar_inversiones" onclick="abrirInversion()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+        Nueva inversión
+      </button>
+    </div>
+
+    <!-- Comisiones. Estaba en Ajustes → Personal y su sitio es este: aquí está el
+         dinero, y pagar una comisión SACA dinero de una caja de verdad (#32). En
+         Ajustes queda lo que sí es configuración: en qué moneda cobra cada uno. -->
+    <div id="t-comisiones" style="display:none">
+      <div class="tarjeta">
+        <h2>Comisiones</h2>
+        <div class="pista" style="margin-top:0">Lo que le toca a cada uno este mes, lo que
+          ya cobró y lo que queda. Pagarle <b>saca el dinero de la caja</b> que elijas.</div>
+        <label class="lbl">Mes</label>
+        <input type="month" id="com-mes" onchange="cargarComisiones()">
+        <div id="lista-comisiones"></div>
+        <div id="com-aviso"></div>
+        <div id="com-pagos"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ AJUSTES ═══ -->
+  <section id="p-ajustes" class="pantalla">
+
+    <!-- ÍNDICE. Ajustes tenía quince tarjetas una detrás de otra y el dueño se
+         perdía buscando lo que quería. Ahora entra por aquí y solo ve la
+         sección que le hace falta. Los botones cuyo apartado no tenga nada que
+         esa persona pueda ver se esconden solos (mira ajustesSegunPermisos). -->
+    <div id="aj-indice">
+      <div class="ajIndice" data-sec="negocio" onclick="abrirAjustes('negocio')">
+        <div class="nm">La empresa</div>
+        <div class="sub">Nombre y logo, sitios, valor del dólar, moneda y la regla de vender
+          sin existencia</div>
+      </div>
+      <div class="ajIndice" data-sec="gente" onclick="abrirAjustes('gente')">
+        <div class="nm">Personal</div>
+        <div class="sub">Trabajadores, cargos y permisos, comisiones y tu clave de
+          recuperación</div>
+      </div>
+      <div class="ajIndice" data-sec="copias" onclick="abrirAjustes('copias')">
+        <div class="nm">Copias y dispositivos</div>
+        <div class="sub">Copias de seguridad y unir la informacion de varios dispositivos</div>
+      </div>
+      <div class="ajIndice" data-sec="dispositivo" onclick="abrirAjustes('dispositivo')">
+        <div class="nm">Este dispositivo</div>
+        <div class="sub">Versión, sello de la empresa y estado del sistema</div>
+      </div>
+    </div>
+
+    <!-- ═══ EL NEGOCIO ═══ -->
+    <div class="ajSec" id="aj-negocio" style="display:none">
+    <div class="ajCab"><button class="btn" onclick="volverAjustes()">← Ajustes</button>
+      <h2>El negocio</h2></div>
+
+    <div class="tarjeta">
+      <h2>Sitios</h2>
+      <div id="lista-sitios"></div>
+      <button class="btn ancho" style="margin-top:11px" data-permiso="gestionar_sitios" onclick="abrirSitio()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+        Nuevo almacén o punto
+      </button>
+    </div>
+    <div class="tarjeta" data-permiso="mi_empresa">
+      <h2>Identidad del negocio</h2>
+      <div class="fotoFila">
+        <div class="fotoPrev" id="mk-logo-prev" onclick="document.getElementById('mk-logo-in').click()">
+          <span>Sin logo</span>
+        </div>
+        <div style="flex:1">
+          <button class="btn ancho" onclick="document.getElementById('mk-logo-in').click()">Cambiar logo</button>
+          <button class="btn ancho" id="mk-logo-quitar" style="margin-top:7px;display:none"
+                  onclick="quitarLogo()">Quitar</button>
+        </div>
+      </div>
+      <input type="file" id="mk-logo-in" accept="image/*" style="display:none" onchange="elegirLogo(event)">
+      <label class="lbl">Nombre del negocio</label>
+      <input type="text" id="mk-nombre" placeholder="D´Padrones">
+      <label class="lbl">Eslogan</label>
+      <input type="text" id="mk-lema" placeholder="Tu eslogan, si tienes uno">
+
+      <label class="lbl">Dirección</label>
+      <textarea id="mk-direccion" rows="3"
+        placeholder="Calle y número,&#10;Municipio,&#10;Provincia"></textarea>
+      <label class="lbl">Teléfono</label>
+      <input type="text" id="mk-telefono" placeholder="+53 5 000 0000">
+      <label class="lbl">Correo</label>
+      <input type="text" id="mk-correo" placeholder="correo@ejemplo.com">
+
+      <div class="btnFila">
+        <button class="btn primario ancho" onclick="guardarMarca()">Guardar</button>
+      </div>
+      <div class="pista">El nombre, el eslogan y el logo salen en la cabecera, en la pantalla
+        de entrar y en todos los PDF. La dirección, el teléfono y el correo salen en el pie
+        de los informes que se imprimen.</div>
+    </div>
+
+    <!-- data-permiso="*" es «solo el administrador»: '*' es el permiso que no
+         se le puede dar a ningún cargo. Esconderlo aquí es comodidad; quien de
+         verdad se niega es el servidor (DECISIONES.md #10). -->
+    <div class="tarjeta" data-permiso="*">
+      <h2>Valor del dólar</h2>
+      <div class="pista" style="margin-top:0">Cada producto lleva un solo precio, en la
+        moneda que quieras. El precio en la otra moneda lo calcula la app con este valor.
+        Cámbialo cuando cambie y vale para todo el catálogo. <b>Solo lo cambia el
+        administrador:</b> con este número se calculan los precios, el valor del almacén
+        y las comisiones de todo el negocio.</div>
+      <label class="lbl">Cuántos CUP vale 1 USD</label>
+      <div class="btnFila" style="margin-top:6px">
+        <input type="number" id="tasa-valor" placeholder="Ej: 440" inputmode="decimal" style="flex:2">
+        <button class="btn primario" style="flex:1" onclick="guardarTasa()">Guardar</button>
+      </div>
+      <div class="pista" id="tasa-nota"></div>
+    </div>
+
+    <!-- La regla de no vender lo que no está. Se cambia aquí porque es una
+         regla del negocio, no una preferencia de quien está en la caja. -->
+    <div class="tarjeta" data-permiso="reglas_negocio">
+      <h2>Vender sin existencia</h2>
+      <label class="casilla">
+        <input type="checkbox" id="sin-stock" onchange="guardarSinStock()">
+        <span>Dejar cobrar aunque el inventario diga que no hay
+          <small>Viene apagado: la caja no deja vender lo que no está en el estante. Si la
+          mercancía llegó y nadie la apuntó, lo que hay que hacer es <b>registrar la entrada
+          en el Almacén</b>, no forzar la venta — así el inventario no se queda mintiendo.
+          Enciéndelo solo si prefieres que la caja nunca te frene.</small></span>
+      </label>
+      <div class="pista">Con varios dispositivos sin internet esto no se puede garantizar del
+        todo: dos cajas pueden vender a la vez la última unidad y solo se ve al juntarlas.
+        Por eso el Almacén sigue teniendo el filtro «En negativo».</div>
+    </div>
+
+    <!-- En qué se MIDE el negocio, que no es lo mismo que en qué se cobra.
+         Cambiarlo no es un ajuste de pantalla: convierte de una vez todos los
+         costos guardados, y por eso pide el cambio y avisa antes. -->
+    <div class="tarjeta" data-permiso="*">
+      <h2>Moneda de la empresa</h2>
+      <div class="pista" style="margin-top:0">En qué moneda se miden los <b>costos</b>, el
+        valor del almacén, las ganancias y las comisiones. No es en qué se cobra —eso se
+        elige en cada venta—, es en qué se piensa. Ahora mismo:
+        <b id="mb-actual">CUP</b>.</div>
+      <div class="pista">Si compras en dólares y el peso se devalúa, medir en pesos hace que
+        un almacén que no ha cambiado parezca valer más cada mes y que las ganancias salgan
+        infladas por la inflación y no por vender mejor.</div>
+      <label class="lbl">Medir la empresa en</label>
+      <select id="mb-moneda" onchange="alElegirMonedaBase()">
+        <option value="CUP">CUP — pesos</option>
+        <option value="USD">USD — dólares</option>
+      </select>
+      <div id="mb-caja" style="display:none">
+        <label class="lbl">¿A cuánto conviertes lo que ya hay guardado?</label>
+        <input type="number" id="mb-tasa" placeholder="Ej: 440" inputmode="decimal">
+        <div class="aviso" style="margin-top:10px">Esto <b>convierte de una vez</b> los costos
+          de todos los productos, de todos los movimientos y de todas las ventas. Se hace una
+          sola vez y no hay botón para deshacerlo: si te equivocas de cambio, hay que
+          recuperar una copia de seguridad. <b>Sal antes a Ajustes → Copias y dale a «Salvar
+          ahora».</b></div>
+        <div class="btnFila">
+          <button class="btn peligro ancho" onclick="cambiarMonedaBase()">Convertir la contabilidad</button>
+        </div>
+      </div>
+      <div id="mb-aviso"></div>
+    </div>
+
+    <!-- ═══ REPASAR LOS COSTOS ═══
+         Va justo debajo de la moneda porque es su consecuencia: entre el 12 y el
+         14 de agosto de 2026 la casilla del costo convertía a pesos aunque el
+         negocio se midiera en dólares. El código ya está arreglado; lo que quedó
+         escrito no se arregla solo, y arrastra la ganancia de cada venta que
+         usó ese costo. -->
+    <details class="tarjeta plegable" data-permiso="corregir_costos">
+      <summary>
+        <div class="nmPleg">Repasar los costos
+          <small>Los productos que dicen costar más de lo que se venden</small></div>
+      </summary>
+      <div class="cuerpoPleg">
+        <div class="pista" style="margin-top:0">Un producto que cuesta más de lo que se cobra
+          por él casi nunca es una mala compra: es el costo escrito en una moneda y guardado
+          como si fuera la otra. Aquí salen todos, y al lado <b>lo que costó de verdad</b>
+          según la inversión con la que entró, que salió de una factura. Ningún número se
+          inventa: se propone, y tú decides.</div>
+        <button class="btn ancho" onclick="repasarCostos()">Buscar los costos raros</button>
+        <div id="rc-lista"></div>
+        <div id="rc-pie" style="display:none">
+          <div class="aviso" style="text-align:left">Esto no cambia solo el catálogo: corrige
+            también el costo congelado en las <b>ventas</b> que se hicieron con él, que es de
+            donde salen las ganancias en negativo. Se hace una copia de seguridad automática
+            justo antes.</div>
+          <label class="lbl">Escribe CORREGIR para confirmar</label>
+          <input type="text" id="rc-palabra" placeholder="CORREGIR" autocapitalize="characters"
+                 autocomplete="off" oninput="revisarCostos()">
+          <button class="btn peligro ancho" id="rc-btn" onclick="corregirCostos()" disabled>
+            Corregir lo marcado</button>
+        </div>
+        <div id="rc-resultado"></div>
+      </div>
+    </details>
+    </div><!-- fin de El negocio -->
+
+    <!-- ═══ LA GENTE ═══ -->
+    <div class="ajSec" id="aj-gente" style="display:none">
+    <div class="ajCab"><button class="btn" onclick="volverAjustes()">← Ajustes</button>
+      <h2>La gente</h2></div>
+
+    <!-- Sin data-permiso a propósito: esto lo tiene que ver TODO el mundo, que
+         de eso se trata. Cada uno se cambia el suyo y nadie más. -->
+    <div class="tarjeta">
+      <h2>Mi PIN</h2>
+      <div class="pista" style="margin-top:0">El que escribes para entrar. Te lo puso el
+        administrador al crear tu usuario: cámbialo por uno que solo sepas tú.</div>
+      <label class="lbl">El PIN que tienes ahora</label>
+      <input type="password" id="mp-actual" inputmode="numeric" autocomplete="off"
+             placeholder="Tu PIN de ahora">
+      <label class="lbl">El PIN nuevo</label>
+      <input type="password" id="mp-nuevo" inputmode="numeric" autocomplete="new-password"
+             placeholder="4 números o más">
+      <label class="lbl">Repite el PIN nuevo</label>
+      <input type="password" id="mp-repe" inputmode="numeric" autocomplete="new-password"
+             placeholder="El mismo otra vez">
+      <div class="pista">Al cambiarlo se cierran tus sesiones en los <b>demás</b> dispositivos:
+        si entraste en otro teléfono, allí habrá que escribir el nuevo. En este te quedas
+        dentro.</div>
+      <div class="btnFila">
+        <button class="btn primario ancho" onclick="cambiarMiPin()">Cambiar mi PIN</button>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Mi clave de recuperación</h2>
+      <div class="pista" style="margin-top:0">La que te deja volver a entrar si olvidas tu PIN.
+        Si la perdiste o crees que alguien la vio, genera otra: la anterior deja de servir.</div>
+      <div id="mk-clave"></div>
+      <button class="btn ancho" style="margin-top:10px" onclick="generarClave()">Generar una clave nueva</button>
+    </div>
+
+    <div class="tarjeta" data-permiso="gestionar_personas">
+      <h2>Cargos</h2>
+      <div id="lista-cargos"></div>
+      <button class="btn ancho" style="margin-top:11px" onclick="abrirCargo()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+        Nuevo cargo
+      </button>
+    </div>
+
+    <div class="tarjeta" data-permiso="gestionar_personas">
+      <h2>Trabajadores</h2>
+      <div id="lista-personas"></div>
+      <button class="btn ancho" style="margin-top:11px" onclick="abrirPersona()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+        Nuevo trabajador
+      </button>
+    </div>
+
+    <!-- Las comisiones se pagan en DINERO, no aquí: pagarle a alguien es una
+         operación de dinero, no un ajuste del negocio (DECISIONES.md #37). Aquí
+         queda solo lo que sí es configuración: quién trabaja, con qué cargo y en
+         qué moneda cobra. -->
+    <div class="tarjeta" data-permiso="ver_comisiones">
+      <h2>Comisiones</h2>
+      <div class="pista" style="margin-top:0">Lo que le toca a cada trabajador, lo que ya
+        cobró y el botón de pagarle están en <b>Dinero → Comisiones</b>. Aquí se decide
+        <b>en qué moneda</b> cobra cada uno: toca su nombre arriba.</div>
+    </div>
+    </div><!-- fin de La gente -->
+
+    <!-- ═══ COPIAS Y DISPOSITIVOS ═══ -->
+    <div class="ajSec" id="aj-copias" style="display:none">
+    <div class="ajCab"><button class="btn" onclick="volverAjustes()">← Ajustes</button>
+      <h2>Copias y dispositivos</h2></div>
+
+    <!-- Las copias de seguridad. Se hacen solas, pero tienen que verse: una
+         salva que nadie ha mirado nunca es una salva en la que no se puede
+         confiar el día que hace falta. -->
+    <div class="tarjeta" data-permiso="copias">
+      <h2>Copias de seguridad</h2>
+      <div class="pista" id="sa-nota">La aplicación guarda una copia entera de la base de
+        datos sola, al arrancar y cada pocas horas.</div>
+      <div id="sa-lista"></div>
+      <div class="btnFila">
+        <button class="btn" style="flex:1" onclick="salvarAhora()">Salvar ahora</button>
+        <button class="btn" style="flex:1" onclick="bajarUltimaSalva()">Descargar la última</button>
+      </div>
+      <div class="pista">Guarda de vez en cuando una copia <b>fuera de esta máquina</b> —en un
+        teléfono, en una memoria—: una copia que vive en el mismo disco que el original no
+        salva de que ese disco se rompa.</div>
+    </div>
+
+    <!-- ═══ BORRAR DATOS ═══
+         Va aquí, junto a las copias, y no en un rincón: quien viene a borrar
+         tiene que tropezarse antes con el botón de salvar. Está escondido
+         detrás de un desplegable a propósito, y solo lo ve el administrador. -->
+    <details class="tarjeta plegable" id="tarjeta-borrar" hidden>
+      <summary>
+        <div class="nmPleg" style="color:var(--rojo)">Borrar datos
+          <small>Vaciar la aplicación para empezar con los datos de verdad</small></div>
+      </summary>
+      <div class="cuerpoPleg">
+        <div class="aviso" style="text-align:left">Lo que se borre <b>no se puede recuperar</b>
+          desde la aplicación: solo volviendo a una copia de seguridad. Se hace una copia
+          automática justo antes, y se te dice cómo se llama.</div>
+        <div id="bo-grupos"></div>
+        <div id="bo-aviso-sync" class="aviso" style="text-align:left;display:none">
+          <b>Hay más dispositivos con esta aplicación.</b> Borrar aquí no borra allí, y la
+          próxima vez que se junten volverán a entrar los datos que tengan ellos. Si quieres
+          empezar de cero de verdad, hazlo en todos.</div>
+        <label class="lbl">Escribe BORRAR para confirmar</label>
+        <input type="text" id="bo-palabra" placeholder="BORRAR" autocapitalize="characters"
+               autocomplete="off" oninput="revisarBorrado()">
+        <button class="btn peligro ancho" id="bo-btn" onclick="borrarDatos()" disabled>
+          Borrar lo marcado</button>
+        <div id="bo-resultado"></div>
+      </div>
+    </details>
+
+    <!-- Se llamaba «Copia de seguridad», igual que la de arriba, y eran cosas
+         distintas: aquella guarda la base entera y esta junta lo de dos
+         dispositivos. Dos tarjetas con el mismo nombre en la misma pantalla es
+         pedirle a alguien que se equivoque. -->
+    <div class="tarjeta" data-permiso="sincronizar">
+      <h2>Juntar dispositivos</h2>
+      <div class="fila"><span>Se exporta lo de</span><b id="sy-sitio">—</b></div>
+      <div class="fila"><span>Contiene</span><b class="num" id="sy-tengo">—</b></div>
+      <div class="btnFila">
+        <button class="btn primario" style="flex:1" onclick="exportarPaquete()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="M7 11l5 5 5-5"/><path d="M4 21h16"/></svg>
+          Exportar
+        </button>
+        <button class="btn" style="flex:1" onclick="document.getElementById('sy-archivo').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3"/><path d="M7 8l5-5 5 5"/><path d="M4 21h16"/></svg>
+          Importar
+        </button>
+      </div>
+      <input type="file" id="sy-archivo" accept=".json,.qs" style="display:none" onchange="importarPaquete(event)">
+      <div class="pista">El archivo lleva el inventario, las ventas, los cierres y el dinero
+        de ese sitio, más el catálogo entero. Al importarlo se <b>suma</b>: lo que ya esté
+        se queda igual y solo se añade lo que falte. Da igual cuántas veces lo hagas.</div>
+      <div id="sy-resultado"></div>
+
+      <details style="margin-top:14px">
+        <summary style="font-size:12.5px;color:var(--texto3);cursor:pointer;font-weight:650">
+          Sincronizar por red con otro servidor</summary>
+        <div class="pista">Para cuando haya internet o estés en el WiFi del almacén. Hace lo
+          mismo que el archivo, pero solo con lo nuevo desde la última vez.</div>
+        <input type="text" id="sy-url" placeholder="http://192.168.1.50:3010 o https://…">
+        <div class="dosCol">
+          <div><input type="text" id="sy-usuario" placeholder="Usuario allí" autocapitalize="none"></div>
+          <div><input type="password" id="sy-pin" placeholder="Su PIN" inputmode="numeric"></div>
+        </div>
+        <div class="btnFila">
+          <button class="btn" style="flex:1" onclick="guardarServidorSync()">Guardar</button>
+          <button class="btn acento" style="flex:2" id="btn-sync" onclick="sincronizarAhora()">Sincronizar ahora</button>
+        </div>
+        <div id="sy-historial"></div>
+        <div class="pista">La primera vez que se habla con otro servidor se apunta su sello y
+          después solo se acepta ese. Si esa copia se reinstaló desde cero, su sello es otro y
+          hay que olvidar el viejo a mano.</div>
+        <button class="btn" style="width:100%" onclick="olvidarSello()">Olvidar el sello apuntado</button>
+        <div class="fila" style="border:0;padding-top:10px"><span style="font-size:12px;color:var(--texto3)">Esta instalación</span>
+          <b id="sy-id" style="font-size:11px;font-family:ui-monospace,monospace;color:var(--texto3)">—</b></div>
+      </details>
+    </div>
+    </div><!-- fin de Copias y dispositivos -->
+
+    <!-- ═══ ESTE DISPOSITIVO ═══ -->
+    <div class="ajSec" id="aj-dispositivo" style="display:none">
+    <div class="ajCab"><button class="btn" onclick="volverAjustes()">← Ajustes</button>
+      <h2>Este dispositivo</h2></div>
+
+    <div class="tarjeta" id="tarjeta-sello" hidden>
+      <h2>Preparar un dispositivo nuevo</h2>
+      <div class="pista">Cada teléfono o tableta necesita instalar <b>una sola vez</b> el sello del
+        negocio. Sin él, el navegador enseña un aviso rojo, no deja usar la cámara para escanear
+        y la aplicación no puede trabajar sin internet.</div>
+      <a class="btn acento" style="width:100%;display:block;text-align:center;text-decoration:none"
+         href="/sello" target="_blank" rel="noopener">Abrir las instrucciones del sello</a>
+      <div class="pista">En el dispositivo nuevo, escribir la dirección de este servidor <b>sin la
+        «s»</b> (http://…) y saldrán solas.</div>
+    </div>
+
+
+    <!-- Actualizar a mano. En un teléfono no se puede abrir la consola del
+         navegador ni borrar la caché del service worker a mano, así que sin
+         este botón la única salida era cerrar y abrir la aplicación varias
+         veces a ver si sonaba la flauta. -->
+    <div class="tarjeta">
+      <h2>Versión de la aplicación</h2>
+      <div class="fila">
+        <span>En este dispositivo</span><b class="num" id="ver-sw2">—</b>
+      </div>
+      <div class="fila">
+        <span>En el servidor</span><b class="num" id="ver-servidor">—</b>
+      </div>
+      <div id="ver-aviso"></div>
+      <button class="btn ancho" style="margin-top:10px" onclick="buscarActualizacion()">
+        Buscar actualización</button>
+      <div class="pista">Si las dos líneas dicen lo mismo, este dispositivo está al día.
+        Si no, el botón se trae la versión nueva y la aplicación se reinicia sola.
+        Hace falta internet.</div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Estado del sistema</h2>
+      <div class="fila"><span>Servidor</span><b id="e-srv">comprobando…</b></div>
+      <div class="fila"><span>Sitios</span><b class="num" id="e-sitios">—</b></div>
+      <div class="fila"><span>Productos</span><b class="num" id="e-prods">—</b></div>
+      <div class="fila"><span>Movimientos</span><b class="num" id="e-movs">—</b></div>
+      <div class="fila"><span>Ventas</span><b class="num" id="e-ventas">—</b></div>
+    </div>
+    </div><!-- fin de Este dispositivo -->
+
+    <!-- La version vive aqui y no en todas las pantallas: solo hace falta
+         cuando algo va mal, y en la caja solo estorbaba. -->
+    <footer>D´Padrones · <span id="ver">—</span> · <span id="ver-sw">—</span></footer>
+  </section>
+
+</main>
+
+
+<nav>
+  <button class="activo" data-p="caja" data-permiso="vender" onclick="irA('caja',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M2 12h20"/></svg>
+    Caja
+  </button>
+  <button data-p="ventas" onclick="irA('ventas',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+    Cierre
+  </button>
+  <button data-p="almacen" onclick="irA('almacen',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v10a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M9 21V12h6v9"/></svg>
+    Almacén
+  </button>
+  <button data-p="dinero" data-permiso="ver_fondo,ver_informes,ver_inversiones,ver_comisiones" onclick="irA('dinero',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    Dinero
+  </button>
+  <button data-p="ajustes" onclick="irA('ajustes',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 004.6 8a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 3.68 1.65 1.65 0 0010 2.17V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 8v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    Ajustes
+  </button>
+</nav>
+
+<!-- ═══ FICHA DEL PRODUCTO ═══ -->
+<div class="velo" id="velo-ficha" onclick="if(event.target===this)cerrarFicha()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarFicha()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="ficha-titulo">Nuevo producto</h3>
+
+    <div id="ficha-codigo-caja" style="display:none">
+      <div class="codigoGrande" id="ficha-codigo">DP-0000</div>
+      <div class="pista">Escribe este código en el producto o en su caja. En la caja lo
+        puedes teclear para encontrarlo al instante.</div>
+    </div>
+
+    <label class="lbl">Foto <span style="font-weight:400;text-transform:none;color:var(--texto3)">(opcional)</span></label>
+    <div class="fotoFila">
+      <div class="fotoPrev" id="f-foto-prev" onclick="document.getElementById('f-foto-gal').click()">
+        <span>Sin foto</span>
+      </div>
+      <div style="flex:1">
+        <button class="btn ancho" onclick="document.getElementById('f-foto-cam').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Hacer una foto
+        </button>
+        <button class="btn ancho" style="margin-top:7px" onclick="document.getElementById('f-foto-gal').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          De la galería
+        </button>
+        <button class="btn ancho" id="f-foto-quitar" style="margin-top:7px;display:none"
+                onclick="quitarFoto()">Quitar</button>
+        <div class="pista">Se guarda encogida, para que no engorde la copia de seguridad.</div>
+      </div>
+    </div>
+    <!-- DOS casillas y no una, y esto no es adorno. La de la cámara lleva
+         capture="environment", que es una orden al teléfono de abrir la cámara
+         trasera y NO ofrecer nada más: con una sola casilla que lo llevara,
+         llegar a una foto que ya está en la galería era imposible. Y quitarlo a
+         secas tampoco vale, porque entonces hacer una foto pasa a ser rebuscar
+         la cámara dentro de un menú del sistema. Cada botón pide lo suyo. -->
+    <input type="file" id="f-foto-cam" accept="image/*" capture="environment"
+           style="display:none" onchange="elegirFoto(event)">
+    <input type="file" id="f-foto-gal" accept="image/*"
+           style="display:none" onchange="elegirFoto(event)">
+
+    <label class="lbl">Nombre *</label>
+    <input type="text" id="f-nombre" placeholder="Ej: Cable 2x1.5mm">
+
+    <label class="lbl">Categoría</label>
+    <input type="text" id="f-cat-in" list="lista-cats" placeholder="Ej: Cables">
+    <datalist id="lista-cats"></datalist>
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Unidad de medida</label>
+        <input type="text" id="f-um" placeholder="Unidad" list="lista-um">
+        <datalist id="lista-um">
+          <option>Unidad</option><option>Metro</option><option>Rollo</option>
+          <option>Caja</option><option>Juego</option><option>Kilogramo</option>
+        </datalist>
+      </div>
+      <div>
+        <label class="lbl">Código del fabricante</label>
+        <div style="display:flex;gap:7px">
+          <input type="text" id="f-codbarra" placeholder="Si lo trae impreso" style="flex:1">
+          <button class="btn" style="flex:0 0 auto;padding:11px 12px" onclick="abrirEscaner('ficha')"
+                  title="Escanear">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><path d="M7 12h10"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- El costo se GUARDA siempre en pesos, aunque se compre en dólares: si
+         cada producto llevara su moneda, el valor del almacén y el cuadre del
+         día no significarían nada. Pero escribirlo en dólares y hacer la cuenta
+         de cabeza tampoco: aquí se elige en qué moneda se teclea y la app pasa
+         la cifra al guardarla, con el valor del dólar de hoy. -->
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Costo (lo que pagaste)</label>
+        <input type="number" id="f-costo" placeholder="0" inputmode="decimal">
+      </div>
+      <div>
+        <label class="lbl">Lo pagaste en</label>
+        <select id="f-costo-moneda" onchange="equivalenciaCosto()">
+          <option value="CUP">CUP</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+    </div>
+    <div class="pista" id="f-costo-equiv"></div>
+
+    <label class="lbl">Costo de reposición</label>
+    <input type="number" id="f-costorepo" placeholder="Igual que el costo" inputmode="decimal">
+    <div class="pista">En la misma moneda que el costo de arriba. El de reposición es lo que
+      cuesta comprarlo <b>hoy</b>: se usa para que la comisión del vendedor salga del margen
+      real y no de la subida de precios, que es dinero que hace falta para volver a comprar.</div>
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Precio de venta *</label>
+        <input type="number" id="f-precio" placeholder="0" inputmode="decimal">
+      </div>
+      <div>
+        <label class="lbl">En qué moneda</label>
+        <select id="f-precio-moneda">
+          <option value="CUP">CUP</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+    </div>
+    <div class="pista" id="f-equivale"></div>
+    <label class="lbl">Alerta de stock bajo</label>
+    <input type="number" id="f-stockmin" placeholder="0" inputmode="decimal">
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Comisión al vendedor</label>
+        <input type="number" id="f-comision" placeholder="0" inputmode="decimal"
+               oninput="alCambiarComision()">
+      </div>
+      <div>
+        <!-- Antes esta casilla decía «Pesos por unidad» escrito a mano, de cuando
+             todo se medía en pesos. Con el negocio en dólares el rótulo mentía: se
+             leía «14 pesos al vendedor» cuando lo guardado eran 14 dólares. Ahora
+             la moneda se elige en la casilla de al lado, como en el costo. -->
+        <label class="lbl">La comisión es…</label>
+        <select id="f-comision-tipo" onchange="alCambiarComision()">
+          <option value="0">Una cantidad por unidad</option>
+          <option value="1">% del precio</option>
+        </select>
+      </div>
+    </div>
+    <div id="f-comision-moneda-caja">
+      <label class="lbl">La comisión está en</label>
+      <select id="f-comision-moneda" onchange="alCambiarComision()">
+        <option value="CUP">CUP — pesos</option>
+        <option value="USD">USD — dólares</option>
+      </select>
+    </div>
+    <div class="pista" id="f-comision-pista"></div>
+
+    <label class="lbl">Precio distinto en algún sitio</label>
+    <div id="ficha-precios"></div>
+    <div class="pista">Déjalo vacío y ese sitio usa el precio general.</div>
+
+    <div class="btnFila">
+      <button class="btn primario" style="flex:2" onclick="guardarProducto()">Guardar</button>
+      <button class="btn peligro" id="btn-borrar" style="flex:1;display:none" onclick="borrarProducto()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ COBRO ═══ -->
+<div class="velo" id="velo-cobro" onclick="if(event.target===this)cerrarCobro()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarCobro()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Cobrar</h3>
+    <div class="codigoGrande" id="cobro-total" style="color:var(--acento-osc)">0 CUP</div>
+    <div id="cobro-detalle" class="pista"></div>
+    <label class="lbl">Cliente (opcional)</label>
+    <input type="text" id="cobro-cliente" placeholder="Nombre o teléfono">
+    <div id="cobro-aviso"></div>
+    <div class="btnFila">
+      <button class="btn primario ancho" id="btn-confirmar" onclick="confirmarVenta()">Confirmar venta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ESCÁNER ═══ -->
+<div class="velo" id="velo-escaner" onclick="if(event.target===this)cerrarEscaner()">
+  <div class="modal" style="max-width:460px">
+    <button class="cerrar" onclick="cerrarEscaner()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="esc-titulo">Escanear</h3>
+    <div class="pista" id="esc-pista">Apunta al código de barras del producto.</div>
+    <div class="camara">
+      <video id="esc-video" playsinline muted></video>
+      <div class="mira"></div>
+    </div>
+    <div id="esc-estado" class="pista" style="text-align:center;min-height:20px"></div>
+    <div id="esc-hallado"></div>
+  </div>
+</div>
+
+<!-- ═══ CONTADOR DE BILLETES ═══ -->
+<div class="velo" id="velo-contador" onclick="if(event.target===this)cerrarContador()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarContador()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Contador de billetes</h3>
+    <div class="pestanas" style="margin-top:12px">
+      <button class="activa" onclick="monedaContador('CUP',this)">CUP</button>
+      <button onclick="monedaContador('USD',this)">USD</button>
+    </div>
+    <div id="ct-lista"></div>
+    <div class="codigoGrande num" id="ct-total" style="font-size:30px">0 CUP</div>
+    <div class="pista" id="ct-nota"></div>
+    <div class="btnFila">
+      <button class="btn" style="flex:1" onclick="limpiarContador()">Empezar de cero</button>
+      <button class="btn primario" style="flex:2" id="ct-usar" onclick="usarContador()">Usar este total</button>
+    </div>
+    <details style="margin-top:14px">
+      <summary style="font-size:12.5px;color:var(--texto3);cursor:pointer;font-weight:650">
+        Cambiar las denominaciones</summary>
+      <div class="pista">Los valores que se cuentan, separados por comas. Si un billete deja
+        de circular, quítalo aquí y desaparece en todos los puntos.</div>
+      <label class="lbl">Billetes y monedas de CUP</label>
+      <input type="text" id="ct-den-cup" placeholder="1000, 500, 200…">
+      <label class="lbl">Billetes de USD</label>
+      <input type="text" id="ct-den-usd" placeholder="100, 50, 20…">
+      <div class="btnFila">
+        <button class="btn ancho" onclick="guardarDenominaciones()">Guardar denominaciones</button>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- ═══ CÓDIGO DEL PRODUCTO NUEVO ═══ -->
+<div class="velo" id="velo-codigo" onclick="if(event.target===this)cerrarCodigoNuevo()">
+  <div class="modal" style="max-width:400px;text-align:center">
+    <h3 style="margin-bottom:2px">Producto creado</h3>
+    <div class="pista" style="text-align:center" id="nc-nombre"></div>
+    <div class="codigoGrande" style="font-size:40px;padding:26px 16px" id="nc-codigo">DP-0000</div>
+    <div class="pista" style="text-align:center">Escribe este código en el producto o en su
+      caja. En la caja lo tecleas y aparece al instante.</div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="cerrarCodigoNuevo()">Ya lo apunté</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LOS AVISOS ═══ -->
+<div class="velo" id="velo-avisos" onclick="if(event.target===this)cerrarAvisos()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarAvisos()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Avisos</h3>
+    <div class="pista">Lo que está esperando a que alguien lo atienda. Desaparece solo
+      cuando se atiende, aquí o en otro dispositivo.</div>
+    <div id="av-lista"></div>
+
+    <!-- El permiso del navegador SOLO se pide con un botón. Pedirlo al abrir la
+         aplicación es lo que hace que la gente le dé a «Bloquear» sin leer, y
+         entonces ya no hay forma de volver a preguntarlo. -->
+    <div id="av-permiso" style="display:none;margin-top:14px">
+      <button class="btn ancho" onclick="pedirPermisoAvisos()">
+        Avisarme también con el aviso del teléfono</button>
+      <div class="pista">Sale arriba, con sonido, aunque estés en otra pantalla de la
+        aplicación. Hace falta que la aplicación esté abierta.</div>
+    </div>
+    <div id="av-permiso-no" class="pista" style="display:none;margin-top:14px">
+      Los avisos del teléfono están <b>bloqueados</b> para esta dirección. Se vuelven a
+      permitir desde el candado de la barra de direcciones del navegador.
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DE DÓNDE SALIÓ UN APUNTE DEL FONDO ═══ -->
+<!-- Cada apunte guarda de qué viene desde el primer día, pero eso no se veía en
+     ningún sitio: en la lista salía «Venta · 1 500 CUP» y para saber qué venta
+     era había que ir a Cierre, poner la fecha buena, elegir el sitio bueno y
+     buscarla a ojo entre las del día. -->
+<div class="velo" id="velo-origen" onclick="if(event.target===this)cerrarOrigen()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarOrigen()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="or-titulo">El movimiento</h3>
+    <div id="or-cuerpo"></div>
+  </div>
+</div>
+
+<!-- ═══ PASAR DINERO DE UN SITIO A OTRO ═══ -->
+<!-- No es un retiro: el dinero no sale del negocio, cambia de caja. Por eso
+     se apunta en dos mitades —sale de una y entra en la otra— y el fondo
+     general no se mueve. -->
+<div class="velo" id="velo-traspaso" onclick="if(event.target===this)cerrarTraspaso()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarTraspaso()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Transferencia entre sitios</h3>
+    <div class="pista">El dinero no sale de la empresa: cambia de caja. El saldo general no
+      se mueve, y las dos cajas quedan cuadradas con lo que tienen dentro.</div>
+
+    <label class="lbl">Sitio de origen *</label>
+    <select id="tr-origen" onchange="pintarSaldoTraspaso()"></select>
+    <div class="pista" id="tr-hay"></div>
+
+    <label class="lbl">Sitio de destino *</label>
+    <select id="tr-destino"></select>
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Importe *</label>
+        <input type="number" id="tr-importe" placeholder="0" inputmode="decimal" step="any">
+      </div>
+      <div>
+        <label class="lbl">Moneda</label>
+        <select id="tr-moneda" onchange="pintarSaldoTraspaso()">
+          <option value="CUP">CUP</option><option value="USD">USD</option>
+        </select>
+      </div>
+    </div>
+    <div class="pista">Las dos mitades van en la misma moneda. Cambiar pesos por dólares no
+      es pasar dinero de sitio: es una compraventa, y esconderla aquí haría que nadie
+      supiera a cuánto se cambió.</div>
+
+    <label class="lbl">Concepto</label>
+    <input type="text" id="tr-concepto" placeholder="Para pagar a los montadores">
+
+    <button class="btn acento ancho" onclick="guardarTraspaso()">Registrar la transferencia</button>
+  </div>
+</div>
+
+<!-- ═══ PRODUCTO NUEVO SOBRE LA MARCHA ═══ -->
+<!-- Sale al crear un producto desde la caja, una entrada, una inversión o una
+     cotización. Antes se creaba con el nombre y nada más, y la unidad se
+     quedaba en «Unidad»: un cable que se vende por metros aparecía contado por
+     unidades y el inventario decía cualquier cosa. Se pide aquí, que es el
+     único momento en que quien lo crea sabe en qué se mide. -->
+<div class="velo" id="velo-nuevoprod" onclick="if(event.target===this)cerrarProductoRapido()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarProductoRapido()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Producto nuevo</h3>
+    <div class="pista">Se añade al catálogo con esto. El precio de venta, el costo y la foto
+      se le ponen luego, en Productos.</div>
+    <label class="lbl">Nombre *</label>
+    <input type="text" id="np-nombre" placeholder="Cable 10mm">
+    <label class="lbl">¿En qué se mide?</label>
+    <input type="text" id="np-um" placeholder="Unidad" list="lista-um">
+    <div class="pista">Metro para el cable, Rollo, Caja… Es como se va a contar en el
+      inventario, y cambiarlo después no recalcula lo ya apuntado.</div>
+    <button class="btn acento ancho" onclick="confirmarProductoRapido()">Crear</button>
+  </div>
+</div>
+
+<!-- ═══ ENTRADA / MERMA ═══ -->
+<div class="velo" id="velo-mov" onclick="if(event.target===this)cerrarMov()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarMov()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="mov-titulo">Entrada de mercancía</h3>
+    <div class="pista" id="mov-pista"></div>
+
+    <label class="lbl">Producto *</label>
+    <input type="search" id="mov-busq" placeholder="Código o nombre…" autocomplete="off">
+    <div id="mov-resultados"></div>
+    <div id="mov-elegido" style="display:none">
+      <div class="codigoGrande" style="font-size:16px;padding:11px" id="mov-elegido-nm"></div>
+      <!-- Lo que hay de eso en este sitio, antes de teclear la cantidad. En la
+           merma es lo que evita el viaje: se ve que solo quedan 2 sin llegar al
+           cartel (decisión #40, como el saldo de la caja en la #38). -->
+      <div class="pista" id="mov-hay"></div>
+    </div>
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Cantidad *</label>
+        <input type="number" id="mov-cant" placeholder="0" inputmode="decimal"
+               oninput="alPonerCantMov()">
+      </div>
+      <div id="mov-costo-caja">
+        <!-- La moneda se escribe al abrir: el negocio se mide en la suya, y
+             «Costo por unidad» a secas se teclea en la que uno tenga en la
+             cabeza, que no siempre es la misma. -->
+        <label class="lbl" id="mov-costo-lbl">Costo por unidad</label>
+        <input type="number" id="mov-costo" placeholder="0" inputmode="decimal">
+      </div>
+    </div>
+
+    <div id="mov-actualizar-caja" style="display:none;margin-top:10px">
+      <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer">
+        <input type="checkbox" id="mov-actualizar" checked style="width:auto;margin:0">
+        Actualizar el costo del producto con este precio
+      </label>
+    </div>
+
+    <div id="mov-motivo-caja" style="display:none">
+      <label class="lbl">Motivo</label>
+      <select id="mov-motivo">
+        <option>Rotura</option><option>Vencido</option><option>Robo o pérdida</option>
+        <option>Defectuoso</option><option>Otro</option>
+      </select>
+    </div>
+
+    <label class="lbl">Nota (opcional)</label>
+    <input type="text" id="mov-obs" placeholder="Ej: factura 331, proveedor Pérez">
+
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarMov()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DESPACHAR ═══ -->
+<div class="velo" id="velo-despacho" onclick="if(event.target===this)cerrarDespacho()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarDespacho()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Despachar mercancía</h3>
+    <div class="pista">Sale del inventario de aquí ahora mismo. Entrará en el destino
+      cuando allí confirmen lo que recibieron.</div>
+
+    <label class="lbl">Enviar a *</label>
+    <select id="des-destino"></select>
+
+    <label class="lbl">Añadir producto</label>
+    <input type="search" id="des-busq" placeholder="Código o nombre…" autocomplete="off">
+    <div id="des-resultados"></div>
+
+    <div id="des-carro" style="margin-top:8px"></div>
+
+    <label class="lbl">Nota (opcional)</label>
+    <input type="text" id="des-obs" placeholder="Ej: pedido semanal">
+
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarDespacho()">Despachar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RECIBIR ═══ -->
+<div class="velo" id="velo-recibir" onclick="if(event.target===this)cerrarRecibir()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarRecibir()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Confirmar lo que recibiste</h3>
+    <div class="pista">Cuenta la mercancía y corrige la cantidad si llegó menos.
+      Lo que falte queda registrado como faltante en tránsito, y el despacho del
+      almacén no se toca.</div>
+    <div id="rec-lineas"></div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarRecepcion()">Confirmar recepción</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CERRAR EL DÍA ═══ -->
+<div class="velo" id="velo-cierre" onclick="if(event.target===this)cerrarCierre()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarCierre()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="ci-titulo">Cerrar la jornada</h3>
+    <div class="pista" id="ci-pista">Una vez cerrado, no se puede apuntar nada más con esa fecha:
+      ni ventas, ni entradas, ni mermas. Si hace falta, se puede reabrir, y queda anotado.</div>
+
+    <!-- Todo lo que solo tiene sentido al CERRAR va aquí dentro. En un día ya
+         cerrado esta parte se esconde y queda únicamente la lista de quién
+         trabajó, que el administrador sí puede corregir: olvidarse de marcar a
+         alguien significa que esa persona no cobra, y reabrir la jornada para
+         arreglarlo sería peor, porque un día reabierto vuelve a aceptar ventas. -->
+    <div id="ci-solo-al-cerrar">
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Efectivo CUP contado</label>
+        <input type="number" id="ci-efectivo" placeholder="0" inputmode="decimal">
+      </div>
+      <div>
+        <label class="lbl">Efectivo USD contado</label>
+        <input type="number" id="ci-transfer" placeholder="0" inputmode="decimal">
+      </div>
+    </div>
+    <button class="btn ancho" style="margin-top:9px" onclick="abrirContador('cierre')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+      Contar los billetes
+    </button>
+    <div id="ci-cuadre-caja"></div>
+    </div>
+
+    <!-- Quiénes trabajaron. La comisión del día se reparte entre estos a partes
+         iguales (DECISIONES.md #32); si no se marca a nadie, la comisión se queda
+         de quien marcó cada venta, como era antes. -->
+    <label class="lbl">¿Quiénes trabajaron hoy?</label>
+    <div class="pista" style="margin-top:0">La comisión del día se reparte entre los que
+      marques, <b>a partes iguales</b>, sin mirar quién marcó cada venta. Si no marcas a
+      nadie, cada comisión se queda de quien hizo la venta.</div>
+    <div id="ci-gente"></div>
+    <div id="ci-gente-nota" class="pista"></div>
+
+    <div id="ci-solo-al-cerrar-2">
+    <label class="lbl">Conteo físico <span style="font-weight:400;text-transform:none;color:var(--texto3)">(opcional)</span></label>
+    <div class="pista" style="margin-top:0">Cuenta lo que tengas delante. Sirve para
+      <b>descubrir</b> descuadres: la app te enseña la diferencia con lo que debería haber.</div>
+    <div class="buscador" style="margin-top:8px">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="ci-busq" placeholder="Añadir producto al conteo…" autocomplete="off">
+    </div>
+    <div id="ci-resultados"></div>
+    <div id="ci-conteo"></div>
+
+    <div id="ci-ajustar-caja" style="display:none;margin-top:12px">
+      <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer">
+        <input type="checkbox" id="ci-ajustar" style="width:auto;margin:0">
+        Ajustar el inventario a lo contado
+      </label>
+      <div class="pista">Si lo marcas, se apunta un movimiento de ajuste con la diferencia.
+        Si no, el descuadre queda registrado pero el inventario no se toca.</div>
+    </div>
+
+    <label class="lbl">Nota de la jornada (opcional)</label>
+    <input type="text" id="ci-obs" placeholder="Ej: se fue la corriente por la tarde">
+    </div>
+
+    <div class="btnFila">
+      <!-- Guardar la lista sin cerrar el día: se puede marcar a la gente por la
+           mañana y cerrar por la noche, y es el único botón que queda cuando el
+           día ya está cerrado. -->
+      <button class="btn ancho" id="ci-btn-gente" onclick="guardarGenteDia()">Guardar quién trabajó</button>
+      <button class="btn acento ancho" id="ci-btn-cerrar" onclick="confirmarCierre()">Cerrar la jornada</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGAR UNA COMISIÓN ═══ -->
+<div class="velo" id="velo-pagocom" onclick="if(event.target===this)cerrarPagoCom()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarPagoCom()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="pc-titulo">Pagar la comisión</h3>
+    <div class="pista" id="pc-pista"></div>
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Importe *</label>
+        <input type="number" id="pc-importe" placeholder="0" inputmode="decimal">
+      </div>
+      <div>
+        <label class="lbl">Moneda</label>
+        <select id="pc-moneda">
+          <option value="CUP">CUP — pesos</option>
+          <option value="USD">USD — dólares</option>
+        </select>
+      </div>
+    </div>
+    <!-- De qué caja sale. Es dinero que se va de verdad: sin decir de dónde, la
+         gaveta del sitio seguiría diciendo que tiene un dinero que ya no está. -->
+    <label class="lbl">Sale de la caja de</label>
+    <select id="pc-sitio"></select>
+    <label class="lbl">Nota (opcional)</label>
+    <input type="text" id="pc-concepto" placeholder="Ej: se le adelantó la mitad">
+    <div class="pista">Queda apuntado como una salida de dinero, contra el mes que estás
+      pagando. Si te equivocas, se puede deshacer desde la lista de pagos.</div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="confirmarPagoCom()">Apuntar el pago</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MOVIMIENTO DEL FONDO ═══ -->
+<div class="velo" id="velo-fondo" onclick="if(event.target===this)cerrarFondo()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarFondo()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="fo-titulo">Movimiento de fondos</h3>
+    <div class="pista" id="fo-pista"></div>
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Importe *</label>
+        <input type="number" id="fo-importe" placeholder="0" inputmode="decimal">
+      </div>
+      <div>
+        <label class="lbl">Moneda</label>
+        <select id="fo-moneda" onchange="pintarCajaFondo()">
+          <option value="CUP">Efectivo CUP</option>
+          <option value="USD">Efectivo USD</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="fo-subtipo-caja">
+      <label class="lbl" id="fo-subtipo-lbl">Tipo *</label>
+      <select id="fo-subtipo"></select>
+    </div>
+
+    <label class="lbl">Concepto</label>
+    <input type="text" id="fo-concepto" placeholder="Ej: salario de agosto">
+
+    <!-- El rótulo lo pone la app: en el dinero que SALE el sitio es obligatorio, y
+         en un ingreso a mano sigue siendo opcional (DECISIONES.md #37). -->
+    <label class="lbl" id="fo-sitio-lbl">Sitio</label>
+    <select id="fo-sitio" onchange="pintarCajaFondo()"></select>
+    <div class="pista" id="fo-sitio-pista"></div>
+
+    <!-- Marcar el dinero que va a la gente. Sin esta casilla, un salario baja el
+         saldo de la caja pero no se resta de la ganancia en ningún desglose, y
+         entonces el negocio parece ganar más de lo que gana (#33). Solo sale en
+         el dinero que SALE: un ingreso marcado así descuadraría la cuenta. -->
+    <div id="fo-gente-caja" style="display:none;margin-top:12px">
+      <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer">
+        <input type="checkbox" id="fo-es-gente" style="width:auto;margin:0"
+               onchange="alMarcarGente()">
+        Esto es dinero para la gente (salario, adelanto)
+      </label>
+      <div class="pista">Si lo marcas, se resta de la ganancia en el cierre y en los
+        resúmenes. Las comisiones ya se restan solas: no hace falta marcarlas aquí.</div>
+      <div id="fo-quien-caja" style="display:none">
+        <label class="lbl">¿A quién? (opcional)</label>
+        <select id="fo-beneficiario"></select>
+      </div>
+    </div>
+
+    <!-- El día del apunte. Antes era siempre hoy y no se podía tocar, así que
+         un gasto de ayer apuntado esta mañana caía en el mes de hoy. -->
+    <label class="lbl">Fecha</label>
+    <input type="date" id="fo-fecha">
+
+    <div id="fo-aviso"></div>
+    <div class="btnFila">
+      <button class="btn primario ancho" id="fo-guardar" onclick="guardarFondo()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ INVERSIÓN: qué se compró y a dónde va ═══ -->
+<div class="velo" id="velo-inversion" onclick="if(event.target===this)cerrarInversion()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarInversion()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="iv-titulo">Nueva inversión</h3>
+    <div class="pista">Pon lo que compraste y a qué precio. El importe se calcula solo. Al
+      registrarla, la mercancía entra en los sitios que digas y el dinero sale de la caja
+      que elijas — y solo si ese dinero está.</div>
+
+    <label class="lbl">Nombre *</label>
+    <input type="text" id="iv-nombre" placeholder="Ej: Contenedor de agosto">
+
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Fecha</label>
+        <input type="date" id="iv-fecha">
+      </div>
+      <div>
+        <label class="lbl">Moneda de la compra</label>
+        <select id="iv-moneda" onchange="renderLineasInversion()">
+          <option value="CUP">CUP</option>
+          <option value="USD">USD</option>
+        </select>
+      </div>
+    </div>
+
+    <label class="lbl">Proveedor (opcional)</label>
+    <input type="text" id="iv-proveedor" placeholder="A quién se le compró">
+
+    <!-- De dónde sale el dinero. Siempre una caja de verdad —la tienda, el
+         almacén, la brigada—, nunca «el fondo del negocio»: esa no es ninguna
+         gaveta que se pueda ir a contar, y con ella la caja del sitio dejaba de
+         cuadrar con el dinero que tiene dentro (decisión #38, 21-ago-2026).
+         Debajo se enseña lo que hay en esa caja, para no escribir el importe a
+         ciegas y enterarse al registrar. -->
+    <label class="lbl">¿De qué caja sale el dinero? *</label>
+    <select id="iv-sitio" onchange="pintarCajaInversion()"></select>
+    <div class="pista" id="iv-sitio-pista"></div>
+
+    <label class="lbl">Qué se compró *</label>
+    <input type="search" id="iv-busq" placeholder="Buscar producto…" autocomplete="off">
+    <div id="iv-resultados"></div>
+    <div id="iv-lineas"></div>
+    <button class="btn ancho" style="margin-top:8px" onclick="anadirDineroInv()">
+      + Añadir dinero que no es mercancía</button>
+    <div class="pista">Para el transporte, un ayudante o la comida de la obra: sale del fondo
+      igual, pero no entra en el inventario.</div>
+
+    <div class="codigoGrande" id="iv-importe" style="font-size:20px">0 CUP</div>
+    <div class="pista" id="iv-desglose"></div>
+
+    <label class="lbl">Nota (opcional)</label>
+    <input type="text" id="iv-nota" placeholder="Ej: factura 1180, llegó el día 3">
+
+    <label class="casilla">
+      <input type="checkbox" id="iv-costos" checked>
+      <span>Poner al día el costo de estos productos<small>Con lo que costaron en esta
+        compra. Lo viejo no se pierde: cada movimiento guarda su costo.</small></span>
+    </label>
+
+    <div id="iv-aviso"></div>
+    <div class="btnFila">
+      <button class="btn" style="flex:1" onclick="guardarInversion()">Guardar borrador</button>
+      <button class="btn primario" style="flex:1.4" onclick="registrarInversion()">Registrar</button>
+    </div>
+    <button class="btn peligro ancho" id="iv-borrar" style="margin-top:9px;display:none"
+            onclick="borrarInversion()">Borrar el borrador</button>
+  </div>
+</div>
+
+<!-- ═══ CÓMO VA UNA INVERSIÓN ═══ -->
+<div class="velo" id="velo-inv-cuentas" onclick="if(event.target===this)cerrarInvCuentas()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarInvCuentas()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="ic-titulo">Inversión</h3>
+    <div class="pista" id="ic-sub"></div>
+    <div id="ic-cuerpo"></div>
+    <div class="btnFila">
+      <button class="btn" style="flex:1" onclick="imprimirInversion()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        PDF
+      </button>
+      <button class="btn peligro" style="flex:1" id="ic-cancelar" data-permiso="gestionar_inversiones"
+              onclick="cancelarInversion()">Cancelar la inversión</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CARGO ═══ -->
+<div class="velo" id="velo-cargo" onclick="if(event.target===this)cerrarCargo()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarCargo()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="cg-titulo">Nuevo cargo</h3>
+    <div class="pista">Marca lo que puede hacer quien tenga este cargo. Lo que no
+      marques, no lo podrá hacer ni aunque conozca la pantalla.</div>
+    <label class="lbl">Nombre del cargo *</label>
+    <input type="text" id="cg-nombre" placeholder="Ej: Vendedor, Almacenero">
+
+    <!-- DÓNDE valen estos permisos. Va en el cargo, y el local de cada persona en
+         su ficha: con «solo su local», un único cargo «Vendedor» sirve para todas
+         las tiendas y no hay que duplicarlo por cada una (DECISIONES.md #35). -->
+    <label class="lbl">Estos permisos valen en</label>
+    <select id="cg-alcance" onchange="alElegirAlcance()">
+      <option value="propio">Solo el local de cada persona</option>
+      <option value="lista">Estos locales…</option>
+      <option value="todos">Todos los locales</option>
+    </select>
+    <div class="pista" id="cg-alcance-pista"></div>
+    <div id="cg-sitios-caja" style="display:none">
+      <div id="cg-sitios"></div>
+    </div>
+
+    <label class="lbl">Permisos</label>
+    <div id="cg-permisos"></div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarCargo()">Guardar cargo</button>
+    </div>
+    <!-- Solo sale al editar uno que ya existe, y solo si no lo tiene nadie
+         puesto: el servidor lo vuelve a comprobar de todos modos (#10). -->
+    <button class="btn peligro ancho" id="cg-borrar" style="display:none;margin-top:8px"
+      onclick="eliminarCargo()">Quitar este cargo</button>
+  </div>
+</div>
+
+<!-- ═══ TRABAJADOR ═══ -->
+<div class="velo" id="velo-persona" onclick="if(event.target===this)cerrarPersona()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarPersona()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="pe-titulo">Nuevo trabajador</h3>
+    <label class="lbl">Nombre *</label>
+    <input type="text" id="pe-nombre" placeholder="Ej: Daniela Pérez">
+    <label class="lbl">Usuario para entrar *</label>
+    <input type="text" id="pe-usuario" placeholder="Ej: daniela" autocapitalize="none">
+    <label class="lbl" id="pe-pin-lbl">PIN *</label>
+    <input type="password" id="pe-pin" inputmode="numeric" placeholder="4 números o más">
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Cargo</label>
+        <select id="pe-cargo"></select>
+      </div>
+      <div>
+        <label class="lbl">Trabaja en</label>
+        <select id="pe-sitio"></select>
+      </div>
+    </div>
+    <!-- La comisión se MIDE en la moneda del negocio, como todo lo demás.
+         Cobrarla es otra cosa: aquí hay quien cobra en dólares y quien cobra
+         en pesos, y esa cuenta se hacía a mano a fin de mes. -->
+    <label class="lbl">Se le paga en</label>
+    <select id="pe-moneda-pago">
+      <option value="">La moneda del negocio</option>
+      <option value="CUP">CUP — pesos</option>
+      <option value="USD">USD — dólares</option>
+    </select>
+    <div class="pista">Solo cambia en qué moneda sale su comisión en la lista de pagos.
+      Lo que gana el negocio no depende de esto.</div>
+    <div id="pe-activo-caja" style="display:none;margin-top:12px">
+      <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer">
+        <input type="checkbox" id="pe-activo" checked style="width:auto;margin:0">
+        Puede entrar en la aplicación
+      </label>
+    </div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarPersona()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ NUEVO SITIO ═══ -->
+<div class="velo" id="velo-sitio" onclick="if(event.target===this)cerrarSitio()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarSitio()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Nuevo sitio</h3>
+    <label class="lbl">Nombre *</label>
+    <input type="text" id="s-nombre" placeholder="Ej: Punto Vedado">
+    <label class="lbl">Qué es</label>
+    <select id="s-tipo">
+      <option value="punto">Punto de venta</option>
+      <option value="almacen">Almacén</option>
+    </select>
+    <label class="lbl">Se surte de</label>
+    <select id="s-padre"></select>
+    <div class="pista">Si eliges «Independiente», ese sitio lleva su propio inventario
+      sin depender de ningún almacén.</div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarSitio()">Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- Documento que se imprime. En pantalla no se ve; al imprimir es lo único
+     que se ve. Así el "PDF" lo hace el propio navegador (Guardar como PDF) sin
+     cargar ninguna librería de fuera, que la app tiene que funcionar sin internet. -->
+<div id="impresion"></div>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

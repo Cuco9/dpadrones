@@ -1,0 +1,639 @@
+/* ═══════════════════════════════════════════════════════════════
+   D´Padrones — estilo
+   Dos colores y nada más: un VINO profundo para la marca (la cabecera, la
+   barra de abajo, los títulos) y un DORADO de acento, reservado para lo que
+   importa: el dinero y la acción principal de cada pantalla. Si el dorado se
+   usa en todo, deja de significar nada.
+
+   Se llaman --marca y --acento, no por su color, a propósito: el día que el
+   dueño quiera otra paleta se cambian los seis valores de aquí abajo y ya
+   está. Nada más de la aplicación sabe de qué color es nada.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root{
+  --marca:#6d1f2e; --marca-osc:#55151f; --marca-claro:#9a3448; --marca-vivo:#b8465b;
+  --acento:#d4a017; --acento-osc:#8a6508; --acento-suave:rgba(212,160,23,.14);
+  --rojo:#c0392b; --rojo-suave:rgba(192,57,43,.11);
+  --ok:#149063; --ok-suave:rgba(20,144,99,.12);
+
+  --texto:#1d1114; --texto2:#6b5057; --texto3:#a08a90;
+  --fondo:#f5f0f1; --tarjeta:#fff; --tarjeta2:#faf5f6;
+  --borde:rgba(109,31,46,.10); --borde-fuerte:rgba(109,31,46,.18);
+
+  --sombra:0 1px 2px rgba(109,31,46,.05), 0 10px 26px -16px rgba(109,31,46,.30);
+  --sombra-alta:0 2px 6px rgba(109,31,46,.07), 0 18px 40px -18px rgba(109,31,46,.40);
+  --r:16px; --r-s:11px;
+  --fuente:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --texto:#f0e7e9; --texto2:#bda8ad; --texto3:#93777f;
+    --fondo:#150b0e; --tarjeta:#26141a; --tarjeta2:#361f26;
+    --borde:rgba(255,255,255,.07); --borde-fuerte:rgba(255,255,255,.14);
+    --acento-osc:#d4a017;
+    --sombra:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -16px rgba(0,0,0,.7);
+    --sombra-alta:0 2px 8px rgba(0,0,0,.35), 0 20px 44px -18px rgba(0,0,0,.8);
+  }
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* Red de seguridad: nada debe empujar la pagina a lo ancho en un movil */
+html,body{margin:0;padding:0;overflow-x:hidden;max-width:100%}
+.fila>span{min-width:0;overflow-wrap:anywhere}
+.tablaCont{overflow-x:auto;-webkit-overflow-scrolling:touch}
+body{
+  font-family:var(--fuente);background:var(--fondo);color:var(--texto);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  padding-bottom:96px;font-size:15px;line-height:1.45;
+}
+.num,.tabular{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+/* ─── Cabecera: el verde del logo con un resplandor de sol ─── */
+header{
+  background:
+    radial-gradient(120% 150% at 88% -30%, rgba(212,160,23,.30) 0%, rgba(212,160,23,0) 55%),
+    linear-gradient(135deg, var(--marca-osc) 0%, var(--marca) 55%, var(--marca-claro) 130%);
+  color:#fff;padding:9px 14px 11px;display:flex;align-items:center;gap:10px;
+  position:sticky;top:0;z-index:40;border-radius:0 0 16px 16px;
+  box-shadow:0 4px 16px -10px rgba(85,21,31,.55);
+}
+header img{width:32px;height:32px;border-radius:9px;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.22)}
+header .nom{font-weight:700;font-size:14.5px;line-height:1.15;letter-spacing:-.015em}
+header .lema{font-size:11px;opacity:.78;margin-top:0}
+.salirBtn{background:rgba(255,255,255,.15);border:0;color:#fff;width:32px;height:32px;
+  border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:background .15s}
+.salirBtn:active{background:rgba(255,255,255,.28)}
+.salirBtn svg{width:17px;height:17px}
+/* La burbuja de la campanita. Va pegada a la esquina y por encima de todo lo
+   demás de la cabecera: es lo único de esta pantalla que pide que alguien haga
+   algo, y si se pierde entre los iconos no sirve de nada. */
+.burbuja{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;background:var(--rojo);color:#fff;font-size:10.5px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;line-height:1;
+  box-shadow:0 0 0 2px var(--marca)}
+.burbuja[hidden]{display:none}
+/* Cada aviso de la lista, con una barrita de color según de qué es. */
+.aviso1{display:flex;gap:11px;align-items:flex-start;padding:11px 12px;cursor:pointer;
+  border:1px solid var(--borde);border-radius:var(--r-s);margin-bottom:8px;
+  border-left:4px solid var(--marca-claro);background:var(--tarjeta)}
+.aviso1:active{background:var(--fondo2)}
+.aviso1.pedido{border-left-color:var(--acento)}
+.aviso1.opinion{border-left-color:var(--acento-osc)}
+.aviso1.stock{border-left-color:var(--rojo)}
+.aviso1 .t{font-weight:700;font-size:14px}
+.aviso1 .s{font-size:12.5px;color:var(--texto3);line-height:1.4;margin-top:2px}
+.aviso1 .c{font-size:11px;color:var(--texto3);white-space:nowrap;margin-top:2px}
+
+/* Nada de margen negativo aquí: la cabecera va fija, así que si el contenido
+   sube por debajo, al desplazar la primera línea desaparece detrás de ella.
+   Quedaba bonito parado y molestaba en cuanto se usaba. */
+main{padding:12px 14px 14px;max-width:880px;margin:0 auto}
+.pantalla{display:none;animation:entra .22s ease}
+.pantalla.activa{display:block}
+@keyframes entra{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ─── Tarjetas ─── */
+.tarjeta{
+  background:var(--tarjeta);border:1px solid var(--borde);border-radius:var(--r);
+  padding:16px;margin-bottom:12px;box-shadow:var(--sombra);
+}
+.tarjeta h2{
+  margin:0 0 12px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--texto3);font-weight:800;display:flex;align-items:center;gap:8px;
+}
+.tarjeta h2::before{content:"";width:3px;height:12px;border-radius:2px;
+  background:var(--acento);flex-shrink:0}
+.fila{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:9px 0;border-bottom:1px solid var(--borde);font-size:14px}
+.fila:last-child{border-bottom:0}
+.fila b{font-weight:700}
+
+/* ─── Tarjeta que se abre y se cierra ───
+   La pantalla de Dinero tenía cuatro tiendas, cada una con diez líneas, una
+   detrás de otra: había que bajar media pantalla para llegar al total. Ahora
+   cada sitio se enseña en una línea con lo que le quedó, y se abre el que se
+   quiera mirar. Es un <details> del navegador: recuerda si está abierto, se
+   maneja con el teclado y funciona aunque el código no cargue. */
+.plegable{padding:0}
+.plegable > summary{
+  list-style:none;cursor:pointer;padding:14px 16px;display:flex;align-items:center;
+  gap:10px;border-radius:var(--r);
+}
+.plegable > summary::-webkit-details-marker{display:none}
+.plegable > summary::after{
+  content:"";width:8px;height:8px;flex-shrink:0;margin-left:auto;
+  border-right:2px solid var(--texto3);border-bottom:2px solid var(--texto3);
+  transform:rotate(45deg) translateY(-2px);transition:transform .18s;
+}
+.plegable[open] > summary::after{transform:rotate(-135deg) translateY(-2px)}
+.plegable[open] > summary{border-bottom:1px solid var(--borde);border-radius:var(--r) var(--r) 0 0}
+.plegable > summary:active{background:var(--fondo2)}
+.plegable .cuerpoPleg{padding:4px 16px 14px}
+/* Lo que se lee sin abrir: el nombre a la izquierda y la cifra a la derecha. */
+.plegable .nmPleg{font-weight:700;font-size:14.5px;flex:1;min-width:0}
+.plegable .nmPleg small{display:block;font-weight:500;font-size:11.5px;color:var(--texto3);
+  margin-top:2px}
+.plegable .cifPleg{font-weight:700;font-size:13.5px;text-align:right;white-space:nowrap}
+
+/* ─── Navegación: barra flotante ─── */
+nav{
+  position:fixed;bottom:12px;left:12px;right:12px;max-width:520px;margin:0 auto;
+  background:var(--tarjeta);border:1px solid var(--borde);border-radius:18px;
+  display:flex;z-index:50;padding:6px;gap:2px;box-shadow:var(--sombra-alta);
+}
+nav button{
+  flex:1;background:none;border:0;padding:7px 2px 6px;cursor:pointer;border-radius:13px;
+  color:var(--texto3);font-size:9.5px;font-weight:700;font-family:inherit;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:background .16s,color .16s;letter-spacing:.01em;
+}
+nav button svg{width:20px;height:20px;stroke-width:1.85}
+nav button.activo{background:var(--marca);color:#fff}
+nav button.activo svg{stroke-width:2.1}
+/* Con el botón de la Web son siete, y en un teléfono estrecho el nombre más
+   largo («Almacén») deja de caber en su hueco. Se aprieta un poco en vez de
+   partir la palabra en dos líneas, que es lo que hacía. */
+@media (max-width:380px){
+  nav button{font-size:8.5px;padding:7px 0 6px;letter-spacing:0}
+  nav button svg{width:18px;height:18px}
+}
+
+/* ─── Formularios ─── */
+label.lbl{display:block;font-size:10.5px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--texto3);margin:14px 0 5px}
+/* OJO con el selector: si aquí entran las casillas de verificación, el
+   appearance:none les quita el tic y quedan invisibles. Se pueden marcar, pero
+   nadie lo ve, y parece que la aplicación no deja elegir varias. Pasó de verdad
+   con los permisos de los cargos. */
+input:not([type=checkbox]):not([type=radio]),select,textarea{
+  width:100%;padding:12px 13px;border:1px solid var(--borde-fuerte);border-radius:var(--r-s);
+  background:var(--tarjeta);color:var(--texto);font-size:15.5px;font-family:inherit;
+  -webkit-appearance:none;appearance:none;transition:border-color .15s,box-shadow .15s;
+}
+input[type=checkbox],input[type=radio]{
+  width:20px;height:20px;margin:0;padding:0;flex-shrink:0;cursor:pointer;
+  accent-color:var(--marca-claro);
+}
+select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%238ba09b' stroke-width='2' stroke-linecap='round'/></svg>");
+  background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
+input:focus,select:focus,textarea:focus{
+  outline:0;border-color:var(--marca-claro);box-shadow:0 0 0 3px rgba(13,138,118,.16)}
+.dosCol{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:12px 17px;border-radius:var(--r-s);border:1px solid var(--borde-fuerte);
+  background:var(--tarjeta);color:var(--texto);font-size:14.5px;font-weight:700;
+  cursor:pointer;font-family:inherit;transition:transform .12s,box-shadow .15s,opacity .15s;
+}
+.btn:active{transform:scale(.975)}
+.btn.primario{background:var(--marca);border-color:var(--marca);color:#fff;
+  box-shadow:0 6px 16px -8px rgba(109,31,46,.7)}
+.btn.acento{background:var(--acento);border-color:var(--acento);color:#3d2c00;
+  box-shadow:0 6px 16px -8px rgba(212,160,23,.75)}
+.btn.peligro{color:var(--rojo);border-color:rgba(192,57,43,.3);background:var(--rojo-suave)}
+.btn.ancho{width:100%}
+.btn svg{width:17px;height:17px;stroke-width:2.1}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btnFila{display:flex;gap:9px;margin-top:15px}
+
+/* ─── Buscador y filtros ─── */
+.buscador{position:relative;margin-bottom:10px}
+.buscador input{padding-left:40px;font-size:16px;background:var(--tarjeta);
+  box-shadow:var(--sombra)}
+.buscador svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  width:17px;height:17px;stroke:var(--texto3);stroke-width:2.2;fill:none}
+.filtros{display:flex;gap:8px;margin-bottom:12px}
+.filtros select,.filtros input{font-size:13px;padding:10px 12px;padding-right:30px}
+
+/* ─── Producto en lista ─── */
+.prod{display:flex;align-items:center;gap:11px;padding:12px 0;
+  border-bottom:1px solid var(--borde);cursor:pointer;transition:opacity .12s}
+.prod:last-child{border-bottom:0}
+.prod:active{opacity:.6}
+.prod .cod{font-family:var(--mono);font-size:11px;font-weight:700;
+  color:var(--marca-claro);background:rgba(13,138,118,.11);
+  padding:5px 8px;border-radius:8px;flex-shrink:0;letter-spacing:.02em}
+.prod .info{flex:1;min-width:0}
+.prod .nm{font-size:14.5px;font-weight:650;line-height:1.3;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prod .sub{font-size:11.5px;color:var(--texto3);margin-top:3px}
+.prod .pre{text-align:right;flex-shrink:0}
+.prod .pre b{font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.prod .pre span{display:block;font-size:11px;color:var(--texto3);margin-top:2px}
+.vacio{text-align:center;padding:32px 16px;color:var(--texto3);font-size:14px;line-height:1.6}
+
+/* ─── Modales ─── */
+.velo{position:fixed;inset:0;background:rgba(4,30,26,.55);backdrop-filter:blur(3px);
+  z-index:60;display:none;align-items:flex-end;justify-content:center}
+.velo.abierto{display:flex;animation:aparece .18s ease}
+@keyframes aparece{from{opacity:0}to{opacity:1}}
+.modal{background:var(--tarjeta);width:100%;max-width:560px;max-height:92vh;
+  overflow-y:auto;border-radius:24px 24px 0 0;padding:22px 18px 30px;position:relative;
+  animation:sube .26s cubic-bezier(.22,1,.36,1);box-shadow:0 -10px 50px rgba(0,0,0,.3)}
+@keyframes sube{from{transform:translateY(26px)}to{transform:none}}
+@media(min-width:600px){ .velo{align-items:center} .modal{border-radius:22px} }
+.modal h3{margin:0 0 6px;font-size:19px;letter-spacing:-.02em;font-weight:750}
+.modal .cerrar{position:absolute;right:14px;top:14px;background:var(--tarjeta2);border:0;
+  cursor:pointer;color:var(--texto2);padding:8px;line-height:0;border-radius:10px}
+.modal .cerrar svg{width:17px;height:17px;stroke-width:2.2}
+
+.codigoGrande{font-family:var(--mono);font-size:27px;font-weight:800;letter-spacing:.05em;
+  text-align:center;background:linear-gradient(135deg,rgba(13,138,118,.09),var(--acento-suave));
+  border:1px solid var(--borde);border-radius:14px;padding:16px;margin:14px 0 4px;
+  color:var(--marca-claro)}
+.pista{font-size:12px;color:var(--texto3);line-height:1.55;margin:7px 0 2px}
+.aviso{background:var(--acento-suave);border:1px solid rgba(212,160,23,.38);
+  border-radius:12px;padding:11px 13px;font-size:12.5px;line-height:1.55;
+  color:var(--texto2);margin-top:11px}
+.sitioPrecio{display:flex;align-items:center;gap:10px;padding:9px 0;
+  border-bottom:1px solid var(--borde)}
+.sitioPrecio:last-child{border-bottom:0}
+.sitioPrecio .nmS{flex:1;font-size:13.5px;font-weight:600}
+.sitioPrecio input{width:106px;text-align:right;padding:9px 11px;font-size:14px}
+
+/* ─── Caja ─── */
+.sitioBarra{display:flex;align-items:center;gap:10px;margin-bottom:12px;
+  font-size:11px;color:var(--texto3);font-weight:800;text-transform:uppercase;
+  letter-spacing:.06em}
+.sitioBarra select,.sitioBarra input{flex:1;padding:9px 12px;font-size:13.5px;
+  font-weight:650;text-transform:none;letter-spacing:0;color:var(--texto)}
+#caja-resultados{margin-bottom:12px}
+#caja-resultados .prod,#mov-resultados .prod,#des-resultados .prod,
+#sv-resultados .prod,#ci-resultados .prod{
+  background:var(--tarjeta);border:1px solid var(--borde);border-radius:13px;
+  padding:11px 13px;margin-bottom:7px;box-shadow:var(--sombra)}
+.stockPill{font-size:11px;font-weight:800;padding:3px 8px;border-radius:20px;
+  background:var(--ok-suave);color:var(--ok);white-space:nowrap}
+.stockPill.poco{background:var(--acento-suave);color:var(--acento-osc)}
+.stockPill.nada{background:var(--rojo-suave);color:var(--rojo)}
+
+/* En un teléfono, nombre + tres controles + importe + papelera no caben en una
+   línea: se salían de la pantalla. Se reparte en dos filas, y solo cuando hay
+   sitio de sobra vuelve a una. */
+.linea{display:grid;grid-template-columns:1fr auto;
+  grid-template-areas:"nm quitar" "cant imp";
+  gap:8px 10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--borde)}
+.linea:last-child{border-bottom:0}
+.linea .nm{grid-area:nm;min-width:0;font-size:14px;font-weight:650;line-height:1.3;
+  overflow-wrap:anywhere}
+.linea .nm small{display:block;font-weight:400;color:var(--texto3);font-size:11.5px;
+  margin-top:3px}
+.linea .cant{grid-area:cant;justify-self:start}
+.linea .imp{grid-area:imp;text-align:right;font-size:15px;font-weight:750;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.linea .quitar{grid-area:quitar;background:none;border:0;color:var(--texto3);
+  cursor:pointer;padding:5px;line-height:0;justify-self:end}
+.linea .quitar svg{width:17px;height:17px;stroke-width:2.2}
+@media(min-width:470px){
+  .linea{grid-template-columns:1fr auto auto auto;
+    grid-template-areas:"nm cant imp quitar";gap:10px}
+  .linea .imp{min-width:84px}
+}
+.cant{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.cant button{width:34px;height:34px;border-radius:9px;border:1px solid var(--borde-fuerte);
+  background:var(--tarjeta2);color:var(--texto);font-size:18px;font-weight:700;
+  cursor:pointer;line-height:1;font-family:inherit;flex-shrink:0}
+.cant button:active{background:var(--marca);color:#fff}
+.cant input{width:52px;min-width:0;text-align:center;padding:8px 2px;font-size:14px;
+  font-weight:700}
+
+/* ─── Cámara del escáner ─── */
+.camara{position:relative;width:100%;aspect-ratio:4/3;background:#000;
+  border-radius:14px;overflow:hidden;margin:12px 0 8px}
+.camara video{width:100%;height:100%;object-fit:cover;display:block}
+.camara .mira{position:absolute;inset:18% 10%;border:2.5px solid var(--acento);
+  border-radius:12px;box-shadow:0 0 0 2000px rgba(0,0,0,.28)}
+
+/* ─── Señal de qué hace tocar una fila ─── */
+/* Si hay que adivinar que una fila se toca, está mal hecha. Cada lista dice
+   con un icono qué pasa al tocarla: lápiz para editar, más para añadir. */
+.accIco{width:28px;height:28px;border-radius:8px;flex-shrink:0;display:flex;
+  align-items:center;justify-content:center;background:var(--tarjeta2);
+  color:var(--texto3);border:1px solid var(--borde)}
+.accIco svg{width:14px;height:14px;stroke-width:2}
+.accIco.editar{background:var(--tarjeta2);color:var(--texto3)}
+.accIco.anadir{background:rgba(13,138,118,.12);color:var(--marca-claro);
+  border-color:rgba(13,138,118,.25)}
+.accIco.anadir svg{stroke-width:2.6}
+.prod:active .accIco{background:var(--marca);color:#fff;border-color:var(--marca)}
+.fichaProd{position:relative}
+.fichaProd .accIco{position:absolute;top:8px;right:8px;width:24px;height:24px;
+  background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(0,0,0,.14)}
+.fichaProd .accIco svg{width:13px;height:13px}
+
+/* ─── Fotos de producto ─── */
+.fotoFila{display:flex;gap:12px;align-items:flex-start;margin-bottom:4px}
+.fotoPrev{width:86px;height:86px;border-radius:12px;flex-shrink:0;cursor:pointer;
+  background:var(--tarjeta2);border:1.5px dashed var(--borde-fuerte);
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.fotoPrev span{font-size:11px;color:var(--texto3);font-weight:600}
+.fotoPrev img{width:100%;height:100%;object-fit:cover}
+.miniFoto{width:38px;height:38px;border-radius:9px;object-fit:cover;flex-shrink:0;
+  background:var(--tarjeta2)}
+
+/* ─── Rejilla de productos de la caja ─── */
+.rejilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));
+  gap:9px;margin-bottom:12px}
+.fichaProd{background:var(--tarjeta);border:1px solid var(--borde);border-radius:13px;
+  padding:11px 12px;cursor:pointer;box-shadow:var(--sombra);display:flex;
+  flex-direction:column;gap:4px;min-height:96px;transition:transform .1s}
+.fichaProd:active{transform:scale(.97)}
+.fichaProd.agotado{opacity:.55;border-style:dashed}
+.fichaProd .foto{width:100%;height:74px;object-fit:cover;border-radius:9px;
+  margin:-2px 0 3px;background:var(--tarjeta2)}
+.fichaProd .nm{font-size:13px;font-weight:650;line-height:1.3;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow-wrap:anywhere}
+.fichaProd .pr{font-size:16px;font-weight:800;color:var(--marca-claro);
+  letter-spacing:-.025em;margin-top:auto}
+.fichaProd .pie{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.fichaProd .cod{font-family:var(--mono);font-size:9.5px;color:var(--texto3);
+  letter-spacing:.02em}
+
+.totalBarra{position:fixed;left:12px;right:12px;bottom:84px;max-width:520px;margin:0 auto;
+  background:var(--marca);color:#fff;border-radius:16px;padding:12px 14px;display:flex;
+  align-items:center;justify-content:space-between;gap:12px;z-index:45;
+  box-shadow:var(--sombra-alta)}
+.totalBarra .tot-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;
+  opacity:.7;font-weight:800}
+.totalBarra .tot-num{font-size:23px;font-weight:800;font-variant-numeric:tabular-nums;
+  letter-spacing:-.025em;margin-top:1px}
+.totalBarra .btn{padding:13px 26px;font-size:15.5px}
+
+/* ─── Ventas y traslados ─── */
+.venta{padding:12px 0;border-bottom:1px solid var(--borde)}
+.venta:last-child{border-bottom:0}
+.venta .cab{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.venta .hora{font-size:12px;color:var(--texto3);font-weight:600}
+.venta .imp{font-size:15.5px;font-weight:750;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em}
+.venta .det{font-size:12px;color:var(--texto2);margin-top:5px;line-height:1.55}
+.venta.anulada{opacity:.45}
+.venta.anulada .imp{text-decoration:line-through}
+.venta .acc{background:none;border:0;color:var(--rojo);font-size:12px;
+  font-weight:700;cursor:pointer;padding:5px 0;font-family:inherit}
+
+/* ─── Entrar ─── */
+/* OJO: la pantalla de entrar es una capa que tapa TODO. Tiene que estar
+   escondida salvo cuando el <body> lleva la clase "entrando". Sin esta regla el
+   usuario mete su PIN, la aplicación carga detrás... y él sigue viendo el
+   formulario, convencido de que no entra. Pasó de verdad. */
+#pantalla-entrar{display:none}
+body.entrando #pantalla-entrar{position:fixed;inset:0;z-index:100;padding:22px;
+  overflow-y:auto;display:flex;align-items:center;justify-content:center;
+  background:
+    radial-gradient(90% 60% at 85% 8%, rgba(212,160,23,.32) 0%, rgba(212,160,23,0) 60%),
+    radial-gradient(70% 50% at 10% 100%, rgba(18,165,140,.35) 0%, rgba(18,165,140,0) 60%),
+    linear-gradient(160deg, var(--marca-osc) 0%, var(--marca) 60%, #053e36 100%);
+}
+.entrarCaja{background:var(--tarjeta);border-radius:22px;padding:30px 24px 26px;
+  width:100%;max-width:390px;text-align:center;box-shadow:0 30px 70px -20px rgba(0,0,0,.55)}
+.logoGrande{width:78px;height:78px;border-radius:19px;margin-bottom:14px;
+  box-shadow:0 8px 22px -8px rgba(85,21,31,.55)}
+.marca{font-size:22px;font-weight:800;letter-spacing:-.03em}
+.lemaGrande{font-size:12.5px;color:var(--acento-osc);font-weight:700;margin-bottom:18px;
+  letter-spacing:.01em}
+.entrarCaja .lbl{text-align:left}
+#in-error,#ad-error{color:var(--rojo);font-size:13px;margin-top:10px;min-height:18px;
+  white-space:pre-line;text-align:left;line-height:1.5}
+body.entrando header,body.entrando main,body.entrando nav{display:none}
+
+/* ─── Permisos ─── */
+.permiso{display:flex;align-items:center;gap:12px;padding:11px 2px;
+  border-bottom:1px solid var(--borde);font-size:13.5px;cursor:pointer;
+  border-radius:8px;transition:background .12s}
+.permiso:last-child{border-bottom:0}
+.permiso:active{background:var(--tarjeta2)}
+.permiso:has(input:checked){font-weight:650;color:var(--marca-claro)}
+.chip{display:inline-block;background:var(--tarjeta2);color:var(--texto2);
+  font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:20px;margin:3px 4px 0 0;
+  border:1px solid var(--borde)}
+.chip.admin{background:var(--acento);color:#3d2c00;border-color:var(--acento)}
+
+/* ─── Pestañas ─── */
+.pestanas{display:flex;gap:5px;margin-bottom:13px;background:var(--tarjeta);
+  padding:5px;border-radius:14px;border:1px solid var(--borde);box-shadow:var(--sombra)}
+.pestanas button{flex:1;padding:10px;border-radius:10px;border:0;background:none;
+  color:var(--texto2);font-size:13.5px;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:background .16s,color .16s}
+.pestanas button.activa{background:var(--marca);color:#fff}
+
+/* ─── Dinero ─── */
+.saldo{font-size:37px;font-weight:800;color:var(--marca-claro);margin:4px 0 2px;
+  font-variant-numeric:tabular-nums;letter-spacing:-.035em;line-height:1.05}
+.mov{display:flex;align-items:center;gap:11px;padding:11px 0;
+  border-bottom:1px solid var(--borde)}
+.mov:last-child{border-bottom:0}
+.mov .ic{width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;
+  align-items:center;justify-content:center;font-size:15px;font-weight:800}
+.mov .ic.mas{background:var(--ok-suave);color:var(--ok)}
+.mov .ic.menos{background:var(--rojo-suave);color:var(--rojo)}
+.mov .txt{flex:1;min-width:0;font-size:13.5px;font-weight:650;line-height:1.35}
+.mov .txt small{display:block;font-weight:400;color:var(--texto3);font-size:11.5px;
+  margin-top:2px}
+.mov .imp{font-size:14.5px;font-weight:750;font-variant-numeric:tabular-nums;
+  flex-shrink:0;letter-spacing:-.02em}
+.mov .imp.mas{color:var(--ok)}
+.mov .imp.menos{color:var(--rojo)}
+
+/* ─── Servicios ─── */
+.serv{background:var(--tarjeta);border:1px solid var(--borde);border-radius:var(--r);
+  padding:16px;margin-bottom:11px;box-shadow:var(--sombra)}
+.serv .nm{font-size:15.5px;font-weight:750;letter-spacing:-.015em}
+.serv .pr{font-size:24px;font-weight:800;color:var(--marca-claro);
+  font-variant-numeric:tabular-nums;margin:7px 0;letter-spacing:-.03em}
+.serv .des{font-size:11.5px;color:var(--texto3);line-height:1.6}
+.serv .accs{display:flex;gap:8px;margin-top:13px}
+.serv .accs .btn{flex:1;padding:10px 12px;font-size:13px}
+
+/* ─── Proyectos ─── */
+.proy{background:var(--tarjeta);border:1px solid var(--borde);border-radius:var(--r);
+  padding:15px 16px;margin-bottom:11px;box-shadow:var(--sombra);cursor:pointer;
+  transition:transform .1s}
+.proy:active{transform:scale(.985)}
+.proy .cab{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.proy .nm{font-size:15.5px;font-weight:750;letter-spacing:-.015em;line-height:1.3}
+.proy .cli{font-size:11.5px;color:var(--texto3);line-height:1.55;margin-top:5px}
+.proy .cifras{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:11px 0 9px}
+.proy .cifras small{display:block;font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--texto3);font-weight:800;margin-bottom:2px}
+.proy .cifras b{font-size:14px;font-weight:750;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em;overflow-wrap:anywhere}
+/* La barra de lo recuperado. Se pone verde oscuro al llegar al 100%: si se
+   quedara igual, «va por el 98%» y «ya está» se leerían iguales de un vistazo. */
+.barra{height:9px;background:var(--tarjeta2);border-radius:20px;overflow:hidden;
+  border:1px solid var(--borde)}
+.barra i{display:block;height:100%;background:var(--acento);border-radius:20px;
+  transition:width .3s}
+.barra i.lleno{background:var(--ok)}
+.ok{color:var(--ok)}
+
+/* Cada producto de una inversión: cantidad, costo y a qué sitio va cada parte.
+   Va en bloque y no en una fila porque el reparto necesita sitio para respirar. */
+.lineaInv{background:var(--tarjeta2);border:1px solid var(--borde);border-radius:12px;
+  padding:12px 13px;margin-bottom:10px}
+.lineaInv .cab{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.lineaInv .nm{font-size:14px;font-weight:650;line-height:1.3;overflow-wrap:anywhere}
+.lineaInv .nm small{display:block;font-weight:400;color:var(--texto3);font-size:11px;
+  font-family:var(--mono);margin-top:2px}
+.lineaInv .quitar{background:none;border:0;color:var(--texto3);cursor:pointer;padding:2px;
+  flex-shrink:0}
+.lineaInv .quitar svg{width:17px;height:17px;stroke-width:2.2}
+.lineaInv .sitioPrecio input{width:88px}
+
+/* Con cinco pestañas —«Comisiones» se mudó aquí desde Ajustes, que no era su
+   sitio— los rótulos no caben al tamaño de siempre en un teléfono. Se aprietan y,
+   si aun así no entran, la tira se desliza a lo ancho en vez de partirse en dos
+   filas, que descoloca todo lo de debajo. */
+.pestanas.cuatro{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.pestanas.cuatro::-webkit-scrollbar{display:none}
+.pestanas.cuatro button{flex:1 0 auto;min-width:64px;padding:10px 6px;font-size:11.5px;
+  letter-spacing:-.015em;white-space:nowrap}
+
+/* ─── Ajustes por secciones ───
+   Ajustes tenía quince tarjetas seguidas y había que bajar media pantalla para
+   encontrar cualquier cosa. Ahora se entra por un índice: botones grandes, del
+   tamaño de un dedo, con una línea que dice qué hay dentro. */
+.ajIndice{background:var(--tarjeta);border:1px solid var(--borde);border-radius:14px;
+  padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:transform .12s, border-color .12s}
+.ajIndice:active{transform:scale(.99)}
+.ajIndice:hover{border-color:var(--marca-claro)}
+.ajIndice .nm{font-size:15.5px;font-weight:750;letter-spacing:-.015em}
+.ajIndice .sub{font-size:12px;color:var(--texto3);line-height:1.5;margin-top:3px}
+.ajCab{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.ajCab h2{margin:0;font-size:15px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--texto3);font-weight:800}
+.ajCab .btn{padding:8px 14px;font-size:13px;flex:0 0 auto}
+/* Cada apartado. Nacen escondidos y los enseña abrirAjustes(). */
+.ajSec{display:none}
+
+/* ─── Tablas y cifras grandes ─── */
+.tabla{width:100%;border-collapse:collapse;font-size:13px}
+.tabla th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--texto3);font-weight:800;padding:7px 4px;border-bottom:1px solid var(--borde)}
+.tabla td{padding:8px 4px;border-bottom:1px solid var(--borde)}
+.tabla td.n,.tabla th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tabla tr:last-child td{border-bottom:0}
+.tabla tfoot td{font-weight:800;border-top:1.5px solid var(--borde-fuerte);border-bottom:0}
+.grande{font-size:33px;font-weight:800;font-variant-numeric:tabular-nums;
+  color:var(--marca-claro);margin:4px 0;letter-spacing:-.035em;line-height:1.05}
+
+/* ─── Viendo la aplicación como otro (DECISIONES.md #35) ───
+   Pegada arriba y en un color que no se parece a nada más de la aplicación: si se
+   confundiera con la cabecera normal, se olvidaría que se está dentro de otra piel
+   y se apuntarían cosas creyendo ser uno mismo. El cuerpo gana un borde del mismo
+   color por la misma razón. */
+#tira-como{position:sticky;top:0;z-index:95;background:#6b3fa0;color:#fff;
+  padding:9px 14px;font-size:13px;display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;box-shadow:var(--sombra-alta)}
+#tira-como b{font-weight:750}
+#tira-como span{opacity:.85}
+#tira-como .btn{margin-left:auto;background:rgba(255,255,255,.16);color:#fff;
+  border-color:rgba(255,255,255,.3);padding:6px 12px;font-size:12.5px}
+#tira-como .faltan{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;
+  align-items:center;background:rgba(0,0,0,.18);border-radius:10px;padding:8px 10px;
+  font-size:12.5px}
+#tira-como .faltan span{opacity:1;background:rgba(255,255,255,.12);border-radius:8px;
+  padding:3px 8px}
+#tira-como .acc{color:#ffd98a;font-weight:700;text-decoration:underline}
+body.encomo{border:3px solid #6b3fa0;border-top:0}
+
+/* ─── Aviso flotante ─── */
+#toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(16px);
+  background:var(--marca);color:#fff;padding:13px 20px;border-radius:14px;
+  font-size:14px;font-weight:650;z-index:90;opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;box-shadow:var(--sombra-alta);
+  max-width:88%;text-align:center}
+#toast.ver{opacity:1;transform:translateX(-50%) translateY(0)}
+
+footer{text-align:center;font-size:10.5px;color:var(--texto3);padding:4px 14px 10px;opacity:.75}
+
+/* ═══ Impresión: el documento que se guarda como PDF ═══ */
+#impresion{display:none}
+@media print{
+  @page{margin:14mm 12mm}
+  body{background:#fff;color:#000;padding:0}
+  header,nav,main,footer,#toast,.velo,#pantalla-entrar{display:none !important}
+  #impresion{display:block;font-size:11pt;font-family:var(--fuente)}
+  #impresion .cab{display:flex;align-items:center;gap:12px;border-bottom:2.5px solid #6d1f2e;
+    padding-bottom:11px;margin-bottom:15px}
+  #impresion .cab img{width:54px;height:54px;border-radius:9px}
+  #impresion .cab .t1{font-size:18pt;font-weight:800;color:#6d1f2e;line-height:1.1;
+    letter-spacing:-.02em}
+  #impresion .cab .t2{font-size:9.5pt;color:#555}
+  #impresion h2{font-size:10.5pt;text-transform:uppercase;letter-spacing:.06em;
+    color:#6d1f2e;margin:17px 0 6px;border-bottom:1px solid #ddd;padding-bottom:3px}
+  #impresion table{width:100%;border-collapse:collapse;font-size:10pt}
+  #impresion th{text-align:left;font-size:8.5pt;text-transform:uppercase;color:#666;
+    border-bottom:1px solid #999;padding:4px 3px}
+  #impresion td{padding:4px 3px;border-bottom:1px solid #eee}
+  #impresion td.n,#impresion th.n{text-align:right;font-variant-numeric:tabular-nums}
+  #impresion tfoot td{font-weight:700;border-top:1.5px solid #666;border-bottom:0}
+  #impresion .kv{display:flex;justify-content:space-between;padding:3.5px 0;
+    border-bottom:1px solid #eee;font-size:10pt}
+  #impresion .kv.fuerte{font-weight:700;border-top:1.5px solid #666;border-bottom:0;
+    margin-top:3px;padding-top:6px}
+  #impresion .pie{margin-top:20px;padding-top:8px;border-top:1px solid #ccc;
+    font-size:8pt;color:#777;display:flex;justify-content:space-between}
+  #impresion .nota{font-size:8.5pt;color:#777;margin-top:5px}
+  .saltar{page-break-inside:avoid}
+
+  /* ─── El certificado de garantía ───
+     Es un papel OFICIAL de la empresa y se imprime como es el suyo, no como el
+     resto de informes de la aplicación: dirección arriba a la izquierda en
+     dorado, logo a la derecha, título centrado, la tabla con TODAS sus rayas
+     -se rellena a mano- y las dos firmas abajo. Por eso tiene sus propias
+     reglas y no reaprovecha .cab ni las tablas de arriba. */
+  #impresion .gar{font-size:11pt;color:#000;line-height:1.45}
+  #impresion .garCab{display:flex;align-items:flex-start;
+    justify-content:space-between;gap:16px}
+  #impresion .garDir{color:#e8a317;font-size:12pt;line-height:1.5}
+  #impresion .garLogo{height:52px;width:auto}
+  #impresion .garTit{text-align:center;font-size:17pt;font-weight:800;
+    margin:2mm 0 3mm;letter-spacing:.01em}
+  #impresion .garCampo{font-size:11pt;margin-bottom:1mm}
+  #impresion .garTexto{text-align:justify;margin:4mm 0 4mm}
+  /* El hueco que se rellena a mano o a máquina: una raya, no un espacio en
+     blanco, para que se vea que ahí falta algo. */
+  #impresion .garHueco{display:inline-block;min-width:60mm;
+    border-bottom:1px solid #000;height:1em;vertical-align:bottom}
+  /* La tabla del certificado no se parece a las de los informes: lleva TODAS
+     las rayas porque se rellena a mano, va un poco más estrecha que el texto y
+     su cabecera es negra y en minúsculas, como en el papel de ellos. Hay que
+     deshacer a mano lo que heredaría de #impresion th, que es gris, pequeña y
+     en mayúsculas. */
+  #impresion .garTabla{width:90%;border-collapse:collapse;font-size:10.5pt;
+    margin:0 auto;page-break-inside:avoid}
+  #impresion .garTabla th,#impresion .garTabla td{border:1px solid #000;
+    padding:1.2mm 2mm;height:6mm}
+  #impresion .garTabla th{text-align:center;font-weight:700;background:#fff;
+    color:#000;font-size:10.5pt;text-transform:none;letter-spacing:0}
+  #impresion .garTabla th:first-child{width:46%}
+  #impresion .garTabla th:nth-child(2){width:27%}
+  #impresion .garTabla td.c{text-align:center}
+  /* El final del certificado —las dos firmas, el aviso y el pie— va en un solo
+     bloque que NO se parte. El pie se estaba yendo él solo a una segunda hoja:
+     el papel quedaba completo y detrás una hoja con un teléfono y un correo.
+     Pasa cuando el trabajo lleva más materiales de los que caben en la tabla.
+     Con esto, si algo no cabe se van los tres juntos, que al menos se lee. */
+  #impresion .garCierre{page-break-inside:avoid}
+  #impresion .garFirmas{display:flex;justify-content:space-between;gap:20mm;
+    margin-top:8mm;font-size:10.5pt;page-break-inside:avoid}
+  #impresion .garFirmas>div{flex:1}
+  #impresion .garLinea{border-top:1px solid #000;width:55mm;margin-bottom:1.5mm}
+  #impresion .garAviso{text-align:center;font-style:italic;font-size:10.5pt;
+    margin:5mm 6mm 0}
+  #impresion .garPie{display:flex;justify-content:space-between;gap:10mm;
+    margin-top:5mm;font-size:10pt}
+}
+
+/* Casilla de verificar con su texto: se pulsa TODA, no solo el cuadradito.
+   Acertarle a 16 píxeles con el dedo es pedir demasiado. */
+.casilla{display:flex;gap:11px;align-items:flex-start;margin:14px 0;cursor:pointer;
+  font-size:14.5px;font-weight:650;padding:8px 0}
+.casilla input{width:22px;height:22px;flex:0 0 auto;margin-top:1px;accent-color:var(--marca)}
+.casilla small{font-weight:500;line-height:1.4;display:block;margin-top:2px}
