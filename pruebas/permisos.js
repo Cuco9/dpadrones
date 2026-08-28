@@ -13,8 +13,9 @@
 //
 //   · que el sitio se comprueba en el SERVIDOR y no escondiendo botones: la prueba
 //     manda el sitio ajeno a mano, que es lo que haría cualquiera;
-//   · que el amarre al sitio vale para leer y para escribir, y también para el
-//     sitio que va dentro de una línea de un trabajo;
+//   · que el amarre al sitio vale para leer y para escribir, y también para los
+//     dos sitios que van dentro de una línea: de dónde sale el material y a
+//     dónde va cada unidad al repartir una inversión;
 //   · que los cargos que llegan con los permisos VIEJOS se traducen en vez de
 //     quedarse vacíos, porque un teléfono con el app.js viejo en su caché los manda
 //     así y dejaría a esa gente fuera de la aplicación;
@@ -237,6 +238,48 @@ const hoy = new Date().toLocaleDateString('sv-SE');
     comp('«estos locales» sin ninguno marcado no abre ninguno, ni el suyo',
       (await postComo(tIvan, '/api/ventas', { sitio_id: tienda, moneda: 'CUP',
         lineas: [{ producto_id: prod, cantidad: 1 }] })).status === 403);
+
+    console.log('\n=== El sitio de dentro de una línea también se mira ===');
+    // El sitio de arriba no es el único que viaja: dentro de cada línea va otro,
+    // y esa es la puerta de atrás. En una inversión hay DOS sitios por línea —de
+    // dónde sale el material y a dónde va cada unidad— y los dos hay que mirarlos.
+    //
+    // Sin la segunda comprobación, quien solo manda en la tienda podía registrar
+    // una inversión y mandar la mercancía al almacén: existencias metidas en un
+    // sitio del que no responde, y sin el traslado que el otro lado confirma.
+    const compradora = (await post('/api/cargos', { nombre: 'Encargada tienda',
+      permisos: ['gestionar_inversiones', 'ver_inversiones', 'ver_catalogo'] })).cuerpo.id;
+    await post('/api/personas', { nombre: 'Marta', usuario: 'marta', pin: '3333',
+      cargo_id: compradora, sitio_id: tienda });
+    const tMarta = (await post('/api/auth/entrar', { usuario: 'marta', pin: '3333' })).cuerpo.token;
+
+    // La caja de donde sale el dinero es la SUYA; lo que se cuela es el reparto.
+    const porElReparto = await postComo(tMarta, '/api/inversiones', {
+      nombre: 'Con truco', moneda: 'CUP', sitio_id: tienda,
+      lineas: [{ producto_id: prod, cantidad: 10, costo_unit: 60,
+                 reparto: [{ sitio_id: almacen, cantidad: 10 }] }] });
+    comp('repartir la mercancía de una inversión hacia otro sitio se niega',
+      porElReparto.status === 403,
+      porElReparto.status + ' ' + JSON.stringify(porElReparto.cuerpo).slice(0, 140));
+    comp('y se le dice qué sitio está tocando y qué hacer en su lugar',
+      /Almacén Principal/.test(porElReparto.cuerpo.error || '') &&
+      /despáchala/i.test(porElReparto.cuerpo.error || ''), porElReparto.cuerpo.error);
+
+    // La otra forma de la misma puerta: el sitio suelto de la línea.
+    comp('y una línea que saca material de otro sitio, tampoco',
+      (await postComo(tMarta, '/api/inversiones', { nombre: 'El otro truco',
+        moneda: 'CUP', sitio_id: tienda,
+        lineas: [{ producto_id: prod, cantidad: 10, costo_unit: 60,
+                   sitio_id: almacen }] })).status === 403);
+
+    // Y lo que SÍ puede hacer, que es la mitad que importa: si esto también se
+    // negara, el gancho estaría cerrado a costa de dejarla sin trabajar.
+    const suya = await postComo(tMarta, '/api/inversiones', {
+      nombre: 'Sin truco', moneda: 'CUP', sitio_id: tienda,
+      lineas: [{ producto_id: prod, cantidad: 10, costo_unit: 60,
+                 reparto: [{ sitio_id: tienda, cantidad: 10 }] }] });
+    comp('repartirla en su propia tienda entra sin problema', suya.status === 200,
+      suya.status + ' ' + JSON.stringify(suya.cuerpo).slice(0, 140));
 
     console.log('\n=== Ver todos los sitios: mirar sí, tocar no ===');
     const mirona = (await post('/api/cargos', { nombre: 'Supervisora',

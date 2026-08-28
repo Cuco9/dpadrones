@@ -640,7 +640,6 @@ ganancias de atrás igual de mal. Así que con el mismo costo se corrigen:
 | `productos` | El costo y el de reposición, con la misma proporción |
 | `movimientos` | **Solo los apuntes que llevan EXACTAMENTE el costo malo** |
 | `ventas` | El costo se vuelve a **sumar** de sus líneas, no se escala |
-| `cotizacion_lineas` | Solo las líneas absurdas: costo por encima de lo cobrado |
 
 Las dos negritas son la regla: **aquí no se reescribe la historia, se corrige un
 error**. Si un producto entró tres veces a precios distintos, los otros dos eran
@@ -948,9 +947,24 @@ elegir esa opción, y nadie lo notaría hasta que alguien tocara la tienda de al
 
 **Se comprueba en un middleware y no puerta por puerta.** Son más de cuarenta las
 que llevan un local, y la que se olvide es justo la que deja pasar. Se mira todo lo
-que llegue con nombre de sitio, en la dirección o en el cuerpo, **incluidas las
-líneas de un trabajo**: si solo se mirara el sitio del trabajo, se podría sacar
-mercancía del almacén escribiéndola en una línea.
+que llegue con nombre de sitio, en la dirección o en el cuerpo.
+
+**Y también los DOS sitios que caben dentro de una línea**, que son la puerta de
+atrás de esto y hay que cerrar las dos:
+
+| Dónde | Qué dice | Qué pasaba sin mirarlo |
+|---|---|---|
+| `lineas[].sitio_id` | de dónde SALE el material | sacar mercancía del almacén escribiéndola en una línea |
+| `lineas[].reparto[].sitio_id` | a dónde VA cada unidad de una inversión | meter existencias en un sitio del que no se responde, y sin el traslado que el otro lado confirma |
+
+La segunda faltaba y se cerró el 28 de agosto de 2026. El camino que SÍ está
+abierto es el bueno: quedarse la mercancía en su sitio y **despacharla**, que deja
+las dos mitades y la confirmación del que recibe (decisión #3).
+
+**No se pasea el cuerpo entero a lo bruto** buscando cualquier `sitio_id` anidado:
+el paquete de sincronización trae los movimientos de TODOS los sitios a propósito,
+y un paseo recursivo se lo comería. Se miran las formas que existen, y cuando
+aparezca una tercera se añade aquí —con su prueba—.
 
 **Con `ver_negocio_entero` se puede MIRAR todo pero no escribir fuera de su local.**
 Son dos cosas distintas y el supervisor necesita la primera.

@@ -538,14 +538,40 @@ app.use('/api', (req, res, next) => {
   if (ajeno) return res.status(403).json({
     error: 'Tú trabajas en ' + losSuyos + ', así que no puedes tocar nada de ' +
            nombreDe(ajeno) + '.', sitio_ajeno: ajeno });
-  // Una línea puede llevar su propio sitio, y ahí también hay que mirar: si no,
-  // se podría sacar mercancía del almacén escribiéndola en una línea.
-  for (const l of (Array.isArray(req.body && req.body.lineas) ? req.body.lineas : [])) {
-    const s = l && l.sitio_id;
-    if (s && !suyos.has(s) && nombres.some(x => x.id === s)) return res.status(403).json({
-      error: 'Una línea saca material de ' + nombreDe(s) + ', y tú trabajas en ' +
-             losSuyos + '.', sitio_ajeno: s });
-  }
+  // El sitio de arriba no es el único que viaja en la petición. Dentro de las
+  // LÍNEAS va otro, y ahí hay que mirar igual, en los dos sitios donde cabe:
+  //
+  //   lineas[].sitio_id          de dónde SALE el material de esa línea
+  //   lineas[].reparto[].sitio_id  a dónde VA cada unidad de una inversión
+  //
+  // El segundo es la misma puerta de atrás que el primero, del revés: sin esta
+  // comprobación, quien solo manda en la tienda podía registrar una inversión
+  // y mandar la mercancía al almacén —metiendo existencias en un sitio del que
+  // no responde, y sin el traslado que el otro lado tiene que confirmar—.
+  //
+  // Lo que sí puede hacer es quedarse la mercancía en su sitio y DESPACHARLA,
+  // que es el camino que deja constancia de las dos mitades (decisión #3).
+  //
+  // Se miran solo estas dos formas y no el cuerpo entero a lo bruto: un paseo
+  // recursivo tropezaría con el paquete de sincronización, que trae los
+  // movimientos de TODOS los sitios a propósito y tiene su propio permiso.
+  const ajenoEnLineas = () => {
+    for (const l of (Array.isArray(req.body && req.body.lineas) ? req.body.lineas : [])) {
+      if (!l) continue;
+      const candidatos = [l.sitio_id];
+      for (const r of (Array.isArray(l.reparto) ? l.reparto : []))
+        if (r) candidatos.push(r.sitio_id);
+      for (const s of candidatos)
+        if (s && typeof s === 'string' && !suyos.has(s) && nombres.some(x => x.id === s))
+          return s;
+    }
+    return null;
+  };
+  const enLinea = ajenoEnLineas();
+  if (enLinea) return res.status(403).json({
+    error: 'Una línea mueve mercancía de ' + nombreDe(enLinea) + ', y tú trabajas en ' +
+           losSuyos + '. Apúntala en tu sitio y despáchala desde el almacén.',
+    sitio_ajeno: enLinea });
   next();
 });
 
