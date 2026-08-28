@@ -6,7 +6,7 @@
 // llegaron a los teléfonos, mientras dábamos el trabajo por terminado. La
 // versión se ve al pie de Ajustes: si no coincide, ese aparato tiene código
 // viejo y no vale para probar nada.
-const CACHE = 'dp-v20260828-1';
+const CACHE = 'dp-v20260828-2';
 
 const ASSETS = [
   './',

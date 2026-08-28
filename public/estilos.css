@@ -79,7 +79,7 @@ header .lema{font-size:11px;opacity:.78;margin-top:0}
 .aviso1{display:flex;gap:11px;align-items:flex-start;padding:11px 12px;cursor:pointer;
   border:1px solid var(--borde);border-radius:var(--r-s);margin-bottom:8px;
   border-left:4px solid var(--marca-claro);background:var(--tarjeta)}
-.aviso1:active{background:var(--fondo2)}
+.aviso1:active{background:var(--tarjeta2)}
 .aviso1.pedido{border-left-color:var(--acento)}
 .aviso1.opinion{border-left-color:var(--acento-osc)}
 .aviso1.stock{border-left-color:var(--rojo)}
@@ -130,7 +130,7 @@ main{padding:12px 14px 14px;max-width:880px;margin:0 auto}
 }
 .plegable[open] > summary::after{transform:rotate(-135deg) translateY(-2px)}
 .plegable[open] > summary{border-bottom:1px solid var(--borde);border-radius:var(--r) var(--r) 0 0}
-.plegable > summary:active{background:var(--fondo2)}
+.plegable > summary:active{background:var(--tarjeta2)}
 .plegable .cuerpoPleg{padding:4px 16px 14px}
 /* Lo que se lee sin abrir: el nombre a la izquierda y la cifra a la derecha. */
 .plegable .nmPleg{font-weight:700;font-size:14.5px;flex:1;min-width:0}
