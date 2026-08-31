@@ -89,7 +89,7 @@ function atributos(nombreComun) {
   return [
     { name: 'commonName', value: nombreComun },
     { name: 'organizationName', value: 'D´Padrones' },
-    { name: 'organizationalUnitName', value: 'Tu Energia Amiga' },
+    { name: 'organizationalUnitName', value: 'Inventario y ventas' },
     { name: 'countryName', value: 'CU' },
   ];
 }
