@@ -28,7 +28,7 @@ ya hay dos cosas funcionando que **no se tocan**:
 | Dirección | Qué es | Se toca |
 |---|---|---|
 | `quinterosolar.org` | redirige a `quinterosolar.com` | **no** |
-| `app.quinterosolar.org` | la aplicación de Quintero Solar | **no** |
+| `app.quinterosolar.org` | la aplicación de otro cliente | **no** |
 | `dpadrones.quinterosolar.org` | **esta aplicación** | sí |
 
 Comprobado el 28 de agosto de 2026: **no hay comodín** en el DNS de
@@ -38,7 +38,7 @@ a los otros dos. Y en nginx cada uno va en su propio archivo, con su
 
 Lo que sí conviene saber: **el nombre del dominio se ve**. Quien mire la barra
 de direcciones va a leer «quinterosolar» en la aplicación de D´Padrones, y el
-día que Quintero Solar deje de ser cliente, este subdominio se va con él. El
+día que ese cliente deje de serlo, este subdominio se va con él. El
 día que haya dominio propio, mudarse es cambiar el DNS, el `server_name` y
 pedir otro certificado: la aplicación **no lleva el dominio escrito por
 dentro**, usa el host de cada petición.
@@ -64,7 +64,7 @@ Hace falta además:
 ## 1. Que el dominio apunte al VPS
 
 En el panel de **quinterosolar.org**, dos registros **nuevos**. No toques los
-que ya están: `app` y la raíz son de Quintero Solar.
+que ya están: `app` y la raíz son de otro cliente.
 
 | Tipo | Nombre | Valor |
 |---|---|---|

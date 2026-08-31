@@ -3,17 +3,16 @@
 Este archivo existe para que dentro de tres meses nadie —ni yo— rompa algo sin
 saber por qué estaba hecho así. Cada decisión lleva el motivo.
 
-Casi todas nacen de los fallos reales de **La Inventería** el 10 de agosto de
+Casi todas nacen de los fallos reales de **una aplicación anterior** el 10 de agosto de
 2026: un día entero persiguiendo inventarios que desaparecían, ventas infladas y
 arreglos que nunca llegaban a los teléfonos.
 
-## De dónde sale esta aplicación
+## Qué hace y qué no hace
 
-D´Padrones **nace de Quintero Solar**, otra aplicación del mismo autor, y se
-quedó con su motor entero: el stock calculado, los apuntes inmutables, el
-candado, la sincronización y las dos monedas. Lo que se quedó fuera, porque
-este negocio **solo vende mercancía**, es todo lo que servía para hacer
-trabajos de montaje:
+D´Padrones lleva **venta y almacén**, y nada más. Por dentro: el stock
+calculado, los apuntes inmutables, el candado, la sincronización y las dos
+monedas. Lo que se dejó fuera, porque este negocio **solo vende mercancía**, es
+todo lo que servía para hacer trabajos de montaje:
 
 - los **servicios y los trabajos** (las plantillas y las cotizaciones),
 - los **clientes** y el **certificado de garantía**, que colgaban de ellos,
@@ -34,7 +33,7 @@ número. Un hueco es más barato de entender que una referencia falsa.
 una lista de **movimientos** (entrada, venta, merma, traslado, ajuste, conteo) y
 el stock es la suma de esa lista.
 
-**Por qué:** La Inventería guardaba el inventario como una foto (`invInicial`).
+**Por qué:** Una aplicación anterior guardaba el inventario como una foto (`invInicial`).
 Cuando dos aparatos guardaban esa foto, uno pisaba al otro y la mercancía
 desaparecía. Con varios aparatos por punto y sin internet, guardar el número es
 imposible de hacer bien.
@@ -73,7 +72,7 @@ vista como faltante en tránsito.
 Al escanear un producto se registra la venta y sale del stock. El conteo del día
 sirve para **detectar descuadres**, no para calcular las ventas.
 
-**Por qué:** en La Inventería las ventas se deducían del conteo al cerrar
+**Por qué:** en una aplicación anterior las ventas se deducían del conteo al cerrar
 (`vendido = disponible − contado`). Eso hacía que apuntar mercancía después de
 cerrar el día **inventara ventas que no existieron**, con su ganancia y el
 salario del trabajador calculados sobre ellas.
@@ -112,7 +111,7 @@ encontrarlo.
 En `public/sw.js`, la constante `CACHE`. Y la app enseña su versión al pie de
 Ajustes.
 
-**Por qué:** en La Inventería `sw.js` estuvo dos meses sin tocarse. El navegador
+**Por qué:** en una aplicación anterior `sw.js` estuvo dos meses sin tocarse. El navegador
 solo avisa de que hay versión nueva cuando ese archivo cambia, así que **seis
 arreglos seguidos nunca llegaron a los teléfonos** mientras dábamos el trabajo
 por terminado. Se perdió medio día persiguiendo un fallo ya arreglado.
@@ -148,7 +147,7 @@ externa la deja inservible en el peor momento.
 
 Si entra un catálogo por archivo, la app lo manda al servidor en cuanto pueda.
 
-**Por qué:** en La Inventería importar un backup escribía solo en el teléfono.
+**Por qué:** en una aplicación anterior importar un backup escribía solo en el teléfono.
 Resultado medido: **49 de 55 productos** de un punto existían únicamente en un
 aparato. Si se pierde ese teléfono, se pierde el catálogo.
 
@@ -182,7 +181,7 @@ esto.** Es el fallo más fácil de no ver, porque todo parece funcionar.
 
 ## 12. Git desde el primer commit, y salva antes de cada despliegue.
 
-**Por qué:** La Inventería pasó semanas sin control de versiones y con código en
+**Por qué:** Una aplicación anterior pasó semanas sin control de versiones y con código en
 el servidor que no estaba en ningún repositorio. Recuperarlo costó una sesión
 entera.
 
@@ -1436,11 +1435,11 @@ que ya no se puede deshacer — y que el criterio siga viviendo en una sola func
 
 ---
 
-## Lo que heredó de Quintero Solar y sigue sin confirmar
+## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
-Lo de aquí abajo se decidió con el dueño de **Quintero Solar**, no con el de
-D´Padrones. La aplicación está construida sobre estas cuatro cosas, así que
-conviene repasárselas con el cliente nuevo antes de darlas por buenas:
+Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía
+dado de antes. La aplicación entera está construida sobre estas cuatro cosas,
+así que conviene repasárselas con él antes de darlas por buenas:
 
 - **Sin internet en los locales.** Cada aparato trabaja solo y la información se
   junta después: cuando el aparato pilla internet, cuando pasan por el almacén,

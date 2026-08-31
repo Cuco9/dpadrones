@@ -134,7 +134,7 @@ const deQuien = (d, nombre) => (d.cuerpo.comisiones || []).find(c => c.persona =
 
     // Precio 1 000 CUP, comisión FIJA de 400 por unidad. Números redondos a
     // propósito: un tercio de 1 200 es 400, y un fallo de reparto se ve a ojo.
-    const prod = (await post('/api/productos', { nombre: 'Lámpara solar', precio: 1000,
+    const prod = (await post('/api/productos', { nombre: 'Camisa blanca', precio: 1000,
       precio_moneda: 'CUP', costo: 500, comision: 400, um: 'Unidad' })).cuerpo.id;
     await post('/api/movimientos', { tipo: 'compra', sitio_id: centro, producto_id: prod,
       cantidad: 100, costo_unit: 500 });

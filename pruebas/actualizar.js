@@ -143,7 +143,7 @@ function sacarDeGit(commit, destino) {
     const dbVieja = path.join(patio, 'vieja.db');
     const p1 = await puertoLibre();
     const s1 = arrancar(viejo, { PUERTO: p1, DP_DB: dbVieja, DP_HTTP: '1',
-      DP_HOST: '127.0.0.1', DP_SALVAS: path.join(patio, 'salvas1'), QS_WEB_CADA: '0',
+      DP_HOST: '127.0.0.1', DP_SALVAS: path.join(patio, 'salvas1'),
       NODE_PATH: path.join(raiz, 'node_modules') });
     await s1.listo;
     BASE = 'http://127.0.0.1:' + p1;
@@ -225,7 +225,7 @@ function sacarDeGit(commit, destino) {
     copiarBase(dbVieja, dbActualizada);
     const p2 = await puertoLibre();
     const s2 = arrancar(raiz, { PUERTO: p2, DP_DB: dbActualizada, DP_HTTP: '1',
-      DP_HOST: '127.0.0.1', DP_SALVAS: path.join(patio, 'salvas2'), QS_WEB_CADA: '0' });
+      DP_HOST: '127.0.0.1', DP_SALVAS: path.join(patio, 'salvas2') });
     await s2.listo;
     BASE = 'http://127.0.0.1:' + p2;
     comp('el código de ahora arranca sobre la base vieja', true);
@@ -245,7 +245,7 @@ function sacarDeGit(commit, destino) {
     const dbNueva = path.join(patio, 'desde-cero.db');
     const p3 = await puertoLibre();
     const s3 = arrancar(raiz, { PUERTO: p3, DP_DB: dbNueva, DP_HTTP: '1',
-      DP_HOST: '127.0.0.1', DP_SALVAS: path.join(patio, 'salvas3'), QS_WEB_CADA: '0' });
+      DP_HOST: '127.0.0.1', DP_SALVAS: path.join(patio, 'salvas3') });
     await s3.listo;
     s3.proceso.kill();
 

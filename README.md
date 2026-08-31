@@ -4,9 +4,9 @@ Inventario, ventas y contabilidad para **D´Padrones**: un almacén principal,
 los puntos de venta que se surten de él, y el dinero de la empresa.
 
 Es una aplicación de **venta y almacén**, nada más: no hace trabajos ni
-servicios, no lleva clientes ni cotizaciones, y no tiene sitio web. Viene de
-[Quintero Solar](../QuinteroSolar), que sí hacía todo eso; lo que se quitó y
-por qué está contado al principio de [DECISIONES.md](DECISIONES.md).
+servicios, no lleva clientes ni cotizaciones, y no tiene sitio web. Lo que se
+dejó fuera a propósito, y por qué, está contado al principio de
+[DECISIONES.md](DECISIONES.md).
 
 **Antes de tocar el código, lee [DECISIONES.md](DECISIONES.md).** Explica por
 qué está hecho así, y casi todo viene de fallos reales que costaron un día
@@ -81,12 +81,12 @@ Las variables de entorno llevan el prefijo `DP_`: `DP_DB` (dónde vive la base),
 
 - **El dominio es prestado.** La aplicación va en
   `dpadrones.quinterosolar.org`, un subdominio del dominio de otro cliente. El
-  nombre se ve en la barra de direcciones, y si Quintero Solar deja de ser
-  cliente, el subdominio se va con él. Mudarse es cambiar el DNS, el
+  nombre se ve en la barra de direcciones, y si ese cliente deja de serlo, el
+  subdominio se va con él. Mudarse es cambiar el DNS, el
   `server_name` y pedir otro certificado: **el dominio no está escrito dentro
   del programa**, se usa el host de cada petición.
-- **Repasar con el dueño** las cuatro cosas que se heredaron de Quintero Solar
-  y están al final de [DECISIONES.md](DECISIONES.md).
+- **Repasar con el dueño** las cuatro cosas que están sin confirmar al final
+  de [DECISIONES.md](DECISIONES.md).
 
 ## El logo
 

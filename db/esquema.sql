@@ -86,9 +86,9 @@ CREATE TABLE IF NOT EXISTS sesiones (
 -- ─── CATÁLOGO ─────────────────────────────────────────────────
 -- Dueño: el administrador. Viaja del principal a los puntos, nunca al revés.
 -- 'costo' es el último costo conocido; 'costo_repo' lo que cuesta reponerlo hoy
--- (de La Inventería: la comisión del vendedor sale del margen a costo de
+-- (de una aplicación anterior: la comisión del vendedor sale del margen a costo de
 -- reposición, no de la subida de precios, que no es ganancia repartible).
--- 'codigo' es el que genera la app (QS-0001), correlativo y legible: se escribe
+-- 'codigo' es el que genera la app (DP-0001), correlativo y legible: se escribe
 -- en el producto y se teclea en la caja. 'codigo_barra' es el del fabricante,
 -- cuando el producto trae uno impreso; se puede escanear igual.
 CREATE TABLE IF NOT EXISTS productos (

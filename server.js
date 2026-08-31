@@ -40,7 +40,7 @@ function initDB() {
     console.log('[init] creado el cargo Administrador');
   }
   // Migraciones: siempre comprobando antes, siempre sin perder nada. Añadir una
-  // columna nueva se hace aquí, no a mano en el servidor (lección de La Inventería).
+  // columna nueva se hace aquí, no a mano en el servidor (lección de una aplicación anterior).
   const cols = t => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
   if (!cols('productos').includes('codigo_barra')) {
     db.exec('ALTER TABLE productos ADD COLUMN codigo_barra TEXT');
@@ -1339,7 +1339,7 @@ app.post('/api/sitios', exige('gestionar_sitios'), (req, res) => {
 // ─── Stock ────────────────────────────────────────────────────
 // Se calcula sumando movimientos (DECISIONES.md #1). No hay ninguna columna
 // que guarde "este sitio tiene 47": ese número es el que se pisaban dos
-// aparatos en La Inventería y hacía desaparecer mercancía.
+// aparatos en una aplicación anterior y hacía desaparecer mercancía.
 app.get('/api/stock', exige('ver_catalogo'), (req, res) => {
   const sitio = req.query.sitio_id;
   if (!sitio) return res.status(400).json({ error: 'Falta el sitio' });
@@ -2112,7 +2112,7 @@ function fusionar(paquete) {
 
       } else if (d.modo === 'reciente') {
         // Dueño único: gana la versión más reciente. Sin dueño único esto sería
-        // exactamente el fallo que nos costó un día entero en La Inventería.
+        // exactamente el fallo que nos costó un día entero en una aplicación anterior.
         const clave = d.clave || ['id'];
         const cond = clave.map(c => `${c}=?`).join(' AND ');
         const set = usar.filter(c => !clave.includes(c)).map(c => `${c}=?`).join(',');
@@ -2350,7 +2350,7 @@ function pinCorrecto(pin, guardado) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Freno de fuerza bruta. En La Inventería hubo que añadirlo después; aquí va
+// Freno de fuerza bruta. En una aplicación anterior hubo que añadirlo después; aquí va
 // desde el principio, que cuesta lo mismo.
 const intentos = new Map();
 function frenado(usuario) {
@@ -2487,7 +2487,7 @@ function faltaDinero(sitioId, moneda, importe, consejo) {
 }
 
 // ─── EL GUARDIÁN DEL DÍA CERRADO ──────────────────────────────
-// Un día cerrado no se toca (DECISIONES.md #5). En La Inventería se podía
+// Un día cerrado no se toca (DECISIONES.md #5). En una aplicación anterior se podía
 // apuntar mercancía en un día ya cerrado: no llegaba al día siguiente Y ademas
 // inflaba las ventas de ese día, porque se calculaban restando el conteo. Aquí
 // no puede pasar, y no por disciplina: porque el servidor lo rechaza.
@@ -2696,7 +2696,7 @@ app.post('/api/traslados/:id/cancelar', exige('traslados_enviar'), (req, res) =>
 // Aquí NO hay ningún "inventario inicial" que copiar de un día al siguiente.
 // El stock de cualquier momento es la suma de los movimientos hasta ese
 // momento, así que el arrastre no puede fallar: no existe. Ese copiado a mano
-// es lo que en La Inventería dejaba días enteros en cero.
+// es lo que en una aplicación anterior dejaba días enteros en cero.
 function stockHasta(sitioId, fecha) {
   const filas = db.prepare(
     'SELECT producto_id, SUM(cantidad) c FROM movimientos WHERE sitio_id=? AND fecha<=? GROUP BY producto_id'
