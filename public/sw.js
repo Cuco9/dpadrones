@@ -2,11 +2,11 @@
 //
 // OJO AL DESPLEGAR: sube el número de CACHE en CADA cambio del front.
 // El navegador solo avisa de que hay versión nueva cuando ESTE archivo cambia.
-// En La Inventería estuvo dos meses sin tocarse y seis arreglos seguidos nunca
+// En una aplicación anterior estuvo dos meses sin tocarse y seis arreglos seguidos nunca
 // llegaron a los teléfonos, mientras dábamos el trabajo por terminado. La
 // versión se ve al pie de Ajustes: si no coincide, ese aparato tiene código
 // viejo y no vale para probar nada.
-const CACHE = 'dp-v20260828-5';
+const CACHE = 'dp-v20260831-1';
 
 const ASSETS = [
   './',

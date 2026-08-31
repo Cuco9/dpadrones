@@ -256,6 +256,21 @@ const servidor = fs.readFileSync(path.join(raiz, 'server.js'), 'utf8');
 comp('el servidor dice qué versión del front sirve, sacada del propio sw.js',
   /VERSION_FRONT[\s\S]{0,400}const CACHE = '\(\[\^'\]\+\)'/.test(servidor) &&
   /front: VERSION_FRONT/.test(servidor));
+// El 31-ago-2026 el cartel de «hay versión nueva» no se apagaba NUNCA, ni después
+// de actualizar de verdad: el servidor le recortaba un prefijo al nombre de la caja
+// y la aplicación le recortaba otro distinto, así que las dos versiones no podían
+// salir iguales ni queriendo. No rompía nada —solo mentía—, y eso es más difícil de
+// encontrar que un fallo que se ve. Aquí se exige que los dos recorten lo mismo, y
+// que eso sea de verdad lo que lleva la caja delante.
+const nombreCaja = (sw.match(/const CACHE = '([^']+)'/) || [])[1] || '';
+const recorteServidor = (servidor.match(/\.replace\((\/\^[a-z-]+\/), ''\)/) || [])[1];
+const recorteApp = (js.match(/c\.replace\((\/\^[a-z-]+\/), ''\)/) || [])[1];
+comp('el servidor y la aplicación recortan el MISMO prefijo del nombre de la caja',
+  !!recorteServidor && recorteServidor === recorteApp,
+  JSON.stringify({ servidor: recorteServidor, aplicación: recorteApp }));
+comp('y ese prefijo es el que la caja lleva de verdad',
+  !!recorteServidor && nombreCaja.startsWith(recorteServidor.slice(2, -1)),
+  JSON.stringify({ caja: nombreCaja, recorte: recorteServidor }));
 comp('la aplicación compara la suya con la del servidor',
   /function mirarVersiones[\s\S]{0,600}\/api\/salud/.test(js));
 comp('y lo hace al arrancar y cada cierto tiempo, no solo si alguien mira',

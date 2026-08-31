@@ -4844,7 +4844,11 @@ async function versionDelDispositivo() {
   const buscar = async () => {
     const ks = await caches.keys();
     const c = (ks || []).filter(k => k.indexOf('dp-v') === 0).sort().pop();
-    return c ? c.replace('qs-', '') : null;
+    // Se le quita el prefijo para comparar con lo que sirve `/api/salud`, que lo
+    // recorta igual (`server.js`, VERSION_FRONT). Hasta el 31-ago aquí se recortaba
+    // un prefijo que no existe en ninguna caja, así que no recortaba nada: el cartel
+    // de «hay versión nueva» no se apagaba ni después de actualizar de verdad.
+    return c ? c.replace(/^dp-/, '') : null;
   };
   try {
     let c = await buscar();
