@@ -281,10 +281,8 @@ function sacarDeGit(commit, destino) {
       '/api/negocio?desde=' + hace30 + '&hasta=' + hoy,
       '/api/comisiones?desde=' + hace30 + '&hasta=' + hoy,
       '/api/inversiones', idInv ? '/api/inversiones/' + idInv : null,
-      '/api/clientes', '/api/cotizaciones', '/api/servicios', '/api/avisos',
-      '/api/salvas', '/api/sync/estado', '/api/web/estado', '/api/web/pedidos',
-      '/api/web/textos', '/api/web/articulos', '/api/web/servicios', '/api/web/opiniones',
-      '/api/web/vista-previa', '/api/borrar/vista-previa',
+      '/api/avisos', '/api/salvas', '/api/sync/estado',
+      '/api/borrar/vista-previa',
     ].filter(Boolean);
     let rotas = [];
     for (const ruta of rutas) {
@@ -316,12 +314,12 @@ function sacarDeGit(commit, destino) {
                              'fondo.CUP.ingreso', 'fondo.CUP.recibido', 'fondo.CUP.mandado',
                              'fondo.USD.retiro', 'fondo.USD.inversion', 'fondo.USD.gasto',
                              'inventario.unidades', 'traslados.salieron', 'ventas',
-                             'ganancia_trabajos', 'trabajos_cobrados']],
+                             'gaveta_inicio.CUP', 'gaveta_inicio.USD']],
       ['/api/fondo', fon, ['saldo.CUP', 'saldo.USD', 'gavetas', 'movimientos', 'resumen']],
       ['/api/resumen', res, ['ventas.por_moneda.CUP', 'ventas.por_moneda.USD', 'ventas.total',
                              'ventas.cuenta', 'por_dia', 'top_productos', 'mermas.valor',
                              'compras.valor', 'compras.unidades', 'mermas.unidades',
-                             'servicios.valor', 'fondo', 'dias_cerrados']],
+                             'fondo', 'dias_cerrados']],
       ['/api/dia', jor, ['ventas.por_moneda.CUP', 'ventas.por_moneda.USD', 'dia']],
     ]) {
       const faltan = campos.filter(c => !hay(obj, c));

@@ -1,0 +1,11 @@
+19e6ae1
+# Lo que corre en el VPS ahora mismo (31-ago-2026, 16:09).
+#
+# Solo se lee la PRIMERA línea, y tiene que ser un commit que exista en git.
+# Con él, pruebas/actualizar.js fabrica una base con el código desplegado, la
+# llena de datos y le pasa el código de ahora por encima: es lo que hace un
+# `git pull` en el VPS. Si el esquema no queda igual que el de una base nueva,
+# el despliegue rompería el negocio.
+#
+# ACTUALIZAR ESTE ARCHIVO CADA VEZ QUE SE DESPLIEGA. Si se queda viejo, la
+# prueba mide contra un pasado que ya nadie tiene.
