@@ -90,11 +90,12 @@ const stock = async (sitio, producto) =>
     await meter(almacen, 'CUP', 5000000);
     await meter(punto.cuerpo.id, 'USD', 50000);
     await meter(punto.cuerpo.id, 'CUP', 5000000);
-    // Y un aporte que NO entra por ninguna tienda: un ingreso a mano sigue pudiendo
-    // no tener sitio (#37), y es lo que hace que exista la fila «Del negocio».
-    await post('/api/fondo', { tipo: 'ingreso', subtipo: 'Aporte de socio', moneda: 'CUP',
-      importe: 1000, concepto: 'Aporte de un socio, sin pasar por ninguna tienda',
-      fecha: dia(60) });
+    // Y un aporte que NO entra por ninguna tienda, que es lo que hace que exista la
+    // fila «Del negocio». Desde el 31-ago-2026 ya no se puede apuntar así por la
+    // puerta; este es de los de antes (ver apunteHeredadoSinSitio, abajo).
+    apunteHeredadoSinSitio(path.join(patio, 'app.db'), {
+      tipo: 'ingreso', subtipo: 'Aporte de socio', moneda: 'CUP', importe: 1000,
+      concepto: 'Aporte de un socio, sin pasar por ninguna tienda', fecha: dia(60) });
     const inv5 = await post('/api/productos', { nombre: 'Inversor 5kW', precio: 500,
       precio_moneda: 'USD', costo: 120000 });
     const cable = await post('/api/productos', { nombre: 'Cable 10mm', precio: 800, costo: 400 });
@@ -545,3 +546,27 @@ const stock = async (sitio, producto) =>
   console.log('\n' + (mal ? 'FALLAN ' + mal + ' de ' + (ok + mal) : 'TODO BIEN: ' + ok + ' comprobaciones'));
   process.exit(mal ? 1 : 0);
 })();
+
+// Un apunte de ANTES del 31 de agosto de 2026, cuando un ingreso a mano todavía
+// podía no llevar sitio. Desde ese día la puerta lo rechaza —se quitó «Ninguno en
+// concreto»— pero los que YA estaban escritos siguen ahí y siguen sumando en la
+// fila «De la empresa»: el pasado no se reescribe (#2).
+//
+// Se escribe directo en la base a propósito, porque es exactamente lo que es: un
+// registro heredado, no algo que la aplicación pueda crear hoy. Sembrarlo por la
+// puerta sería pedirle que acepte lo que acaba de prohibir.
+function apunteHeredadoSinSitio(rutaDB, campos) {
+  const Database = require('better-sqlite3');
+  const d = new Database(rutaDB);
+  try {
+    const ahora = new Date().toISOString();
+    d.prepare(`INSERT INTO fondo
+        (id,tipo,subtipo,moneda,importe,sitio_id,persona_id,beneficiario_id,es_gente,
+         concepto,ref_tipo,ref_id,anula_a,fecha,ts,creado_en)
+        VALUES (?,?,?,?,?,NULL,NULL,NULL,0,?,NULL,NULL,NULL,?,?,?)`)
+      .run('heredado-' + Math.random().toString(36).slice(2, 10),
+           campos.tipo, campos.subtipo || null,
+           campos.moneda === 'USD' ? 'USD' : 'CUP', campos.importe,
+           campos.concepto || '', campos.fecha, Date.now(), ahora);
+  } finally { d.close(); }
+}

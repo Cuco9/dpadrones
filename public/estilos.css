@@ -142,6 +142,43 @@ main{padding:12px 14px 14px;max-width:880px;margin:0 auto}
   margin-top:2px}
 .plegable .cifPleg{font-weight:700;font-size:13.5px;text-align:right;white-space:nowrap}
 
+/* ─── Un renglón que se abre para enseñar de qué está hecho ───
+   «Ingresos por ventas · 166.00 USD» no dice cuáles fueron ni de qué. Ahora se
+   toca el renglón y salen debajo los apuntes que lo suman, y de cada venta lo
+   que llevaba dentro. Va CERRADO: son ocho renglones por tienda, y abrirlos
+   todos de golpe haría la pantalla de tres metros que la tarjeta plegable vino
+   a evitar. Lo pidió el dueño el 29 de agosto de 2026, con esas palabras: «que
+   no ocupe tanto espacio, que sea desplegable opcional». */
+.renglon > summary{list-style:none;cursor:pointer}
+.renglon > summary::-webkit-details-marker{display:none}
+.renglon > summary:active{opacity:.55}
+/* La flechita va pegada al rótulo y no al borde: a la derecha está la cifra, y
+   una flecha ahí se lee como parte del número. */
+.renglon > summary > span::after{
+  content:"";display:inline-block;width:5px;height:5px;margin-left:7px;
+  vertical-align:2px;border-right:1.7px solid var(--texto3);
+  border-bottom:1.7px solid var(--texto3);transform:rotate(45deg);transition:transform .18s;
+}
+.renglon[open] > summary > span::after{transform:rotate(-135deg) translateY(2px)}
+/* La rayita de la izquierda dice, sin escribirlo, que todo esto cuelga del
+   renglón de arriba y no es una lista más de la tarjeta. */
+.desgl{margin:2px 0 9px 3px;padding:2px 0 2px 11px;border-left:2px solid var(--borde)}
+.desgl .ap{display:flex;justify-content:space-between;gap:10px;padding:6px 0;
+  font-size:12.5px;color:var(--texto2);border-bottom:1px solid var(--borde)}
+.desgl .ap:last-child{border-bottom:0}
+.desgl .ap > span{min-width:0;overflow-wrap:anywhere}
+.desgl .ap b{white-space:nowrap;font-weight:700}
+.desgl .ap small{display:block;color:var(--texto3);font-size:11px;margin-top:2px;
+  font-weight:500}
+.desgl .prod{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;
+  color:var(--texto3);padding:2px 0 2px 9px;line-height:1.4}
+.desgl .prod b{font-weight:600}
+/* Un apunte anulado y su contrario suman cero, pero los dos cuentan en el
+   renglón de arriba: se enseñan tachados en vez de esconderse, o el desglose no
+   sumaría lo que dice el renglón, que es justo lo que se viene a comprobar. */
+.desgl .muerto{opacity:.55}
+.desgl .muerto > span{text-decoration:line-through}
+
 /* ─── Navegación: barra flotante ─── */
 nav{
   position:fixed;bottom:12px;left:12px;right:12px;max-width:520px;margin:0 auto;

@@ -2994,20 +2994,34 @@ app.get('/api/fondo', exige('ver_fondo'), (req, res) => {
              resumen, por_sitio: porSitio, movimientos: filas });
 });
 
-// El dinero que SALE tiene que decir de qué caja (DECISIONES.md #37). Devuelve el
-// texto del error, o nada si está bien. En una función porque lo comprueban dos
-// caminos —apuntar y corregir— y la vez que un criterio así se escribió dos veces,
-// una de las dos copias se quedó sin él.
+// TODO apunte a mano dice EN QUÉ CAJA pasa (DECISIONES.md #37). Devuelve el texto
+// del error, o nada si está bien. En una función porque lo comprueban dos caminos
+// —apuntar y corregir— y la vez que un criterio así se escribió dos veces, una de
+// las dos copias se quedó sin él.
 //
-// Un INGRESO a mano sigue pudiendo no tener sitio: un aporte de un socio puede no
-// entrar por ninguna tienda. Y los apuntes VIEJOS sin sitio no se tocan: el pasado
-// no se reescribe (#2), así que la fila «De la empresa» sigue existiendo con lo de
-// antes y sumando lo que sumaba.
+// EL INGRESO TAMBIÉN, desde el 31 de agosto de 2026. Hasta entonces podía no
+// llevar sitio —«un aporte de un socio puede no entrar por ninguna tienda»— y la
+// pantalla ofrecía «Ninguno en concreto». Se quitó, y con razón: ese dinero entra
+// físicamente en alguna caja, y si no se dice cuál, la gaveta donde de verdad está
+// no lo cuenta. Es el mismo fallo que la #37 arregló para lo que sale, visto por
+// el otro lado: el efectivo apuntado deja de cuadrar con el que se puede ir a
+// contar, que es justo para lo que sirve.
+//
+// Y los apuntes VIEJOS sin sitio NO se tocan: el pasado no se reescribe (#2), así
+// que la fila «De la empresa» sigue existiendo con lo de antes y sumando lo que
+// sumaba. Solo que ya no se le añade nada nuevo.
+//
+// Ojo con no confundir esta lista con la de arriba: SALE_DE_UNA_CAJA es para
+// comprobar que el dinero ESTÉ dentro (#38), y un ingreso no tiene que estar
+// dentro de nada —lo está metiendo—. Juntarlas prohibiría ingresar en una caja
+// vacía, que es justo lo que hace falta para abrir una tienda nueva.
 const SALE_DE_UNA_CAJA = ['retiro', 'gasto', 'inversion'];
 function sitioDelApunte(b) {
-  if (!SALE_DE_UNA_CAJA.includes(b.tipo)) return null;
-  if (!b.sitio_id) return 'Di de qué caja sale el dinero. Sin eso, la gaveta de ese ' +
-    'sitio seguiría diciendo que tiene un dinero que ya no está.';
+  if (!b.sitio_id) return b.tipo === 'ingreso'
+    ? 'Di en qué caja entra el dinero. Sin eso, esa gaveta no contaría un dinero ' +
+      'que sí está dentro.'
+    : 'Di de qué caja sale el dinero. Sin eso, la gaveta de ese ' +
+      'sitio seguiría diciendo que tiene un dinero que ya no está.';
   if (!db.prepare('SELECT 1 FROM sitios WHERE id=?').get(String(b.sitio_id)))
     return 'Ese sitio no está en esta copia';
   return null;
@@ -4177,6 +4191,23 @@ function cuentasDelNegocio(desde, hasta, verGan, verDinero, soloSitios) {
     traslados: { salieron: 0, entraron: 0 },
     inventario: { unidades: 0, valor: 0 },
     gaveta: { CUP: 0, USD: 0 },
+    // Lo que había en la caja la víspera del período. Con esto, los renglones de
+    // abajo dejan de ser una cifra suelta y pasan a ser un estado de cuenta:
+    //   tenía al empezar  +  lo que entró  −  lo que salió  =  quedó al terminar.
+    //
+    // No rompe la regla de no meter un saldo dentro de un período (#22): es un
+    // saldo A UNA FECHA, con su rótulo, en los dos extremos del período. Lo que
+    // sí estaba mal era la otra tentación —sumarle al saldo de HOY lo que se
+    // movió en un día pasado—, porque el saldo de hoy YA lleva ese día dentro y
+    // cada peso contaría dos veces. El dueño lo pidió así el 29 de agosto de
+    // 2026, mirando el día 26: quería saber con cuánto se cerró esa noche.
+    //
+    // El de terminar NO se consulta aparte: se calcula sumándole al de empezar
+    // lo que se movió, para que la resta que se enseña siempre cuadre con sus
+    // sumandos. Consultarlo por su cuenta podría dar otro número y no habría
+    // forma de saber cuál de los dos miente (#22, «el total es la suma de las
+    // filas, sin atajos»).
+    gaveta_inicio: { CUP: 0, USD: 0 },
     // Los traspasos van en su propia casilla y NO dentro de «ingreso» o
     // «retiro». Para la gaveta de un punto sí es dinero que entra y sale —por
     // eso está—, pero mezclarlo con lo demás haría que una tienda a la que le
@@ -4260,6 +4291,14 @@ function cuentasDelNegocio(desde, hasta, verGan, verDinero, soloSitios) {
         FROM fondo GROUP BY sitio_id, moneda`).all()) {
       dame(g.sitio_id).gaveta[g.moneda === 'USD' ? 'USD' : 'CUP'] = g.saldo;
     }
+    // Y lo que había la víspera: el mismo saldo, cortado justo antes del primer
+    // día del período. Con «desde» vacío no hay víspera y sale cero, que es lo
+    // que corresponde: se está mirando desde el principio de los tiempos.
+    for (const g of db.prepare(`SELECT sitio_id, moneda,
+        COALESCE(SUM(CASE WHEN tipo='ingreso' THEN importe ELSE -importe END),0) saldo
+        FROM fondo WHERE fecha < ? GROUP BY sitio_id, moneda`).all(desde)) {
+      dame(g.sitio_id).gaveta_inicio[g.moneda === 'USD' ? 'USD' : 'CUP'] = g.saldo;
+    }
     // Y el dinero que se movió en el período, por tipo. Los traspasos se
     // apartan: lo que le pasaron a una tienda no es lo que esa tienda ingresó.
     //
@@ -4298,6 +4337,7 @@ function cuentasDelNegocio(desde, hasta, verGan, verDinero, soloSitios) {
     for (const m of ['CUP', 'USD']) {
       total.cobrado[m] += p.cobrado[m];
       total.gaveta[m] += p.gaveta[m];
+      total.gaveta_inicio[m] += p.gaveta_inicio[m];
       for (const t of CONCEPTOS_FONDO) total.fondo[m][t] += p.fondo[m][t];
     }
     for (const c of ['mermas', 'entradas']) {
@@ -4324,9 +4364,10 @@ function cuentasDelNegocio(desde, hasta, verGan, verDinero, soloSitios) {
     for (const c of ['mermas', 'entradas'])
       p[c].valor = verGan ? red(p[c].valor) : null;
     p.inventario.valor = verGan ? red(p.inventario.valor) : null;
-    if (!verDinero) { p.gaveta = null; p.fondo = null; }
+    if (!verDinero) { p.gaveta = null; p.gaveta_inicio = null; p.fondo = null; }
     else for (const m of ['CUP', 'USD']) {
       p.gaveta[m] = redondear(p.gaveta[m], m);
+      p.gaveta_inicio[m] = redondear(p.gaveta_inicio[m], m);
       for (const t of CONCEPTOS_FONDO) p.fondo[m][t] = redondear(p.fondo[m][t], m);
     }
     return p;
@@ -4351,6 +4392,151 @@ app.get('/api/negocio', exige('ver_negocio_entero', 'ver_fondo', 'ver_informes')
   const hasta = req.query.hasta || '9999-12-31';
   res.json(cuentasDelNegocio(desde, hasta, puede(req, 'ver_ganancias'),
                              puede(req, 'ver_fondo'), sitiosQueVe(req)));
+});
+
+// ─── De qué está hecho un renglón de la tarjeta ───────────────
+// «Ingresos por ventas 166.00 USD»: ¿cuáles ventas, de qué, a cómo? Hasta ahora
+// había que salir a Movimientos y buscarlas a ojo entre todo lo demás. El dueño
+// lo pidió el 29 de agosto de 2026 y la pantalla abre cada renglón para enseñar
+// los apuntes que lo forman, y de cada venta lo que llevaba dentro.
+//
+// LA MISMA CONDICIÓN QUE SUMA EL RENGLÓN, ESCRITA UNA SOLA VEZ. Si aquí se
+// escribiera un WHERE parecido pero no igual, el desglose no daría el número que
+// hay encima y no habría forma de saber cuál de los dos miente. Por eso este
+// mapa está pegado al bucle que llena `fondo` en cuentasDelNegocio y hay una
+// prueba que compara los dos, concepto por concepto (pruebas/desglose.js).
+//
+// El reparto es el de aquel bucle, en el mismo orden: los traspasos se apartan
+// primero —no son dinero que entre ni salga del negocio, es la misma plata
+// cambiada de gaveta—, y lo que entra se parte por de dónde viene.
+const DESGLOSE = {
+  de_ventas:   "f.tipo='ingreso' AND COALESCE(f.ref_tipo,'')='venta'",
+  de_otros:    "f.tipo='ingreso' AND COALESCE(f.ref_tipo,'') NOT IN ('venta','traspaso')",
+  recibido:    "f.tipo='ingreso' AND COALESCE(f.ref_tipo,'')='traspaso'",
+  mandado:     "f.tipo<>'ingreso' AND COALESCE(f.ref_tipo,'')='traspaso'",
+  retiro:      "f.tipo='retiro'    AND COALESCE(f.ref_tipo,'')<>'traspaso'",
+  inversion:   "f.tipo='inversion' AND COALESCE(f.ref_tipo,'')<>'traspaso'",
+  gasto:       "f.tipo='gasto'     AND COALESCE(f.ref_tipo,'')<>'traspaso'"
+};
+
+// Cuántos apuntes se mandan de una vez. Un renglón de un día son cuatro o cinco;
+// el de un año, miles. Se corta y se dice que se cortó, en vez de quedarse el
+// teléfono pensando.
+const TOPE_DESGLOSE = 300;
+
+app.get('/api/negocio/desglose', exige('ver_negocio_entero', 'ver_fondo', 'ver_informes'), (req, res) => {
+  // La puerta de arriba la abren tres permisos porque la pantalla de Dinero se
+  // arma con varias cosas (#39), pero el DINERO en sí lo abre uno solo. Quien
+  // entra por «ver_informes» recibe la tarjeta sin gavetas, así que tampoco
+  // puede pedir de qué están hechas.
+  if (!puede(req, 'ver_fondo'))
+    return res.status(403).json({ error: 'No puedes ver el dinero.' });
+  const cond = DESGLOSE[String(req.query.concepto || '')];
+  if (!cond) return res.status(400).json({ error: 'Ese concepto no existe' });
+  const desde = req.query.desde || '0000-01-01';
+  const hasta = req.query.hasta || '9999-12-31';
+  const suyos = idsQueVe(req);
+
+  // Qué fila de la pantalla se está abriendo. Son tres cosas distintas y por eso
+  // hay dos claves que no son un id: «*» es el total —la suma de las filas que a
+  // quien pregunta se le enseñan, no la del negocio entero— y «-» es la fila «De
+  // la empresa», la del dinero que no se apuntó en ningún punto.
+  const cual = String(req.query.sitio_id || '*');
+  const args = [desde, hasta];
+  let donde = '';
+  if (cual === '*') {
+    if (suyos) { donde = ` AND f.sitio_id IN (${suyos.map(() => '?').join(',')})`; args.push(...suyos); }
+  } else if (cual === '-') {
+    // La fila «De la empresa» no es de nadie en concreto, así que solo la ve
+    // quien ve todo. A los demás ni siquiera se les pinta (#39).
+    if (suyos) return res.status(403).json({ error: 'Ese dinero no es de tus locales.' });
+    donde = ' AND f.sitio_id IS NULL';
+  } else {
+    if (suyos && !suyos.includes(cual))
+      return res.status(403).json({ error: 'Ese local no es tuyo.' });
+    donde = ' AND f.sitio_id = ?'; args.push(cual);
+  }
+  const filtro = `WHERE f.fecha BETWEEN ? AND ?${donde} AND ${cond}`;
+
+  // El total se suma de la tabla entera, no de los apuntes que se mandan: si se
+  // sumaran los 300 que caben, un período largo enseñaría un total más chico que
+  // el del renglón de arriba y parecería que las cuentas no cuadran.
+  const total = { CUP: 0, USD: 0 };
+  for (const t of db.prepare(`SELECT f.moneda, COALESCE(SUM(f.importe),0) v
+      FROM fondo f ${filtro} GROUP BY f.moneda`).all(...args))
+    total[t.moneda === 'USD' ? 'USD' : 'CUP'] = redondear(t.v, t.moneda);
+  const cuantos = db.prepare(`SELECT COUNT(*) n FROM fondo f ${filtro}`).get(...args).n;
+
+  // Los apuntes ANULADOS salen, y marcados. En la lista de Movimientos estorban
+  // —quien corrigió un error quiere ver la corrección, no el error, la
+  // corrección y la resta—, pero aquí es al revés: el renglón de arriba los
+  // cuenta a los dos (suman cero), así que esconderlos dejaría un desglose que
+  // no suma lo que dice el renglón, que es justo lo que se venía a comprobar.
+  const apuntes = db.prepare(`SELECT f.id, f.tipo, f.subtipo, f.moneda, f.importe, f.concepto,
+      f.ref_tipo, f.ref_id, f.fecha, f.anula_a, s.nombre sitio, pe.nombre persona,
+      EXISTS (SELECT 1 FROM fondo x WHERE x.anula_a = f.id) anulado
+      FROM fondo f LEFT JOIN sitios s ON s.id=f.sitio_id
+      LEFT JOIN personas pe ON pe.id=f.persona_id
+      ${filtro} ORDER BY f.fecha DESC, f.ts DESC LIMIT ${TOPE_DESGLOSE}`).all(...args);
+
+  // Y lo que hay detrás de cada apunte. De una VENTA, lo que llevaba: es la
+  // pregunta que se hizo el dueño («166 de ventas, ¿cuáles?»). De una compra
+  // basta con su número y su nombre para reconocerla, y de un traspaso, con
+  // qué caja está al otro lado.
+  const porRef = (tipo) => [...new Set(apuntes.filter(a => a.ref_tipo === tipo && a.ref_id)
+    .map(a => a.ref_id))];
+  const enLista = (ids) => `(${ids.map(() => '?').join(',')})`;
+
+  const ventas = porRef('venta');
+  if (ventas.length) {
+    // El costo y la comisión de una venta son ganancias: quien no puede verlas
+    // no las recibe (#10). El precio y la cantidad no lo son —es lo que el
+    // cliente pagó— y esos sí van siempre.
+    const cabeceras = new Map(db.prepare(`SELECT v.id, v.cliente, v.forma_pago, v.anulada_en,
+        pe.nombre persona FROM ventas v LEFT JOIN personas pe ON pe.id=v.persona_id
+        WHERE v.id IN ${enLista(ventas)}`).all(...ventas).map(v => [v.id, v]));
+    const lineas = new Map(ventas.map(id => [id, []]));
+    for (const l of db.prepare(`SELECT m.ref_id, m.cantidad, m.precio_unit, pr.nombre, pr.um
+        FROM movimientos m LEFT JOIN productos pr ON pr.id=m.producto_id
+        WHERE m.ref_tipo='venta' AND m.anula_a IS NULL
+          AND m.ref_id IN ${enLista(ventas)}`).all(...ventas)) {
+      // La cantidad de una venta se guarda en NEGATIVO: es mercancía que salió
+      // del estante. En un desglose de lo que se vendió se lee al derecho.
+      lineas.get(l.ref_id).push({ nombre: l.nombre || '(producto borrado)', um: l.um,
+        cantidad: Math.abs(l.cantidad), precio_unit: l.precio_unit,
+        importe: Math.abs(l.cantidad) * l.precio_unit });
+    }
+    for (const a of apuntes) if (a.ref_tipo === 'venta' && lineas.has(a.ref_id)) {
+      const v = cabeceras.get(a.ref_id) || {};
+      a.de = { tipo: 'venta', cliente: v.cliente || null, persona: v.persona || null,
+               anulada: !!v.anulada_en, lineas: lineas.get(a.ref_id) };
+    }
+  }
+
+  const compras = porRef('inversion');
+  if (compras.length) {
+    const m = new Map(db.prepare(`SELECT id, numero, nombre, proveedor FROM inversiones
+        WHERE id IN ${enLista(compras)}`).all(...compras).map(i => [i.id, i]));
+    for (const a of apuntes) if (a.ref_tipo === 'inversion' && m.has(a.ref_id))
+      a.de = Object.assign({ tipo: 'inversion' }, m.get(a.ref_id));
+  }
+
+  const traspasos = porRef('traspaso');
+  if (traspasos.length) {
+    const mitades = new Map(traspasos.map(id => [id, []]));
+    for (const h of db.prepare(`SELECT f.ref_id, f.tipo, COALESCE(s.nombre,'la empresa') sitio
+        FROM fondo f LEFT JOIN sitios s ON s.id=f.sitio_id
+        WHERE f.ref_tipo='traspaso' AND f.ref_id IN ${enLista(traspasos)}`).all(...traspasos))
+      mitades.get(h.ref_id).push(h);
+    for (const a of apuntes) if (a.ref_tipo === 'traspaso' && mitades.has(a.ref_id)) {
+      // La otra mitad: si este apunte es el que entró, la otra es la que salió.
+      const otra = mitades.get(a.ref_id).find(h => (h.tipo === 'ingreso') !== (a.tipo === 'ingreso'));
+      a.de = { tipo: 'traspaso', otra_caja: otra ? otra.sitio : null };
+    }
+  }
+
+  res.json({ concepto: String(req.query.concepto), sitio_id: cual, desde, hasta,
+             total, cuantos, hay_mas: cuantos > apuntes.length, apuntes });
 });
 
 // ─── Sincronización: los tres caminos ─────────────────────────

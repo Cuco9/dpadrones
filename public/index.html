@@ -406,9 +406,10 @@
       <div class="pista" id="fo-cual" style="margin-top:-4px;font-weight:700;
            color:var(--texto2)"></div>
       <div id="fo-sitios"></div>
-      <div class="pista">Lo de la caja no es del período: es el dinero que hay ahí hoy,
-        contando desde el principio. Los traspasos entre sitios van aparte porque para el
-        negocio no son dinero que entre ni salga: cambia de caja.</div>
+      <div class="pista">Cada sitio se abre y enseña su cuenta: con cuánto empezó, lo que
+        entró y salió, y con cuánto quedó. Toca un renglón para ver de qué está hecho. Los
+        traspasos entre sitios van aparte porque para el negocio no son dinero que entre ni
+        salga: cambia de caja.</div>
 
       <details class="tarjeta plegable">
         <summary>
@@ -1457,7 +1458,8 @@
     <div class="dosCol">
       <div>
         <label class="lbl">Importe *</label>
-        <input type="number" id="fo-importe" placeholder="0" inputmode="decimal">
+        <input type="number" id="fo-importe" placeholder="0" inputmode="decimal"
+               oninput="pintarCajaFondo()">
       </div>
       <div>
         <label class="lbl">Moneda</label>

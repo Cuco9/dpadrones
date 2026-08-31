@@ -2387,18 +2387,69 @@ function tarjetaDeSitio(p, verGan, esTotal) {
   // pantalla se lee «caja». No son lo mismo: uno es el dato y el otro la
   // palabra. Confundirlos dejó esta tarjeta sin pintarse (14-ago-2026).
   const f = p.fondo, g = p.gaveta || { CUP: 0, USD: 0 };
+  const ini = p.gaveta_inicio || { CUP: 0, USD: 0 };
+  // Qué fila es esta para el servidor cuando se le pide el desglose de un
+  // renglón. Dos de las tres claves no son un id: «*» es el total y «-» es la
+  // fila «De la empresa», la del dinero que no se apuntó en ningún punto.
+  const clave = esTotal ? '*' : (p.sitio_id || '-');
   // Un concepto que está en cero en las dos monedas no se pinta: llenar la
   // tarjeta de ceros hace que el número que sí importa se pierda entre ellos.
+  //
+  // Y cada uno se abre para enseñar de qué está hecho: qué ventas fueron esos
+  // 166 USD, qué se retiró y quién lo firmó. Antes había que salir a
+  // Movimientos y buscarlos a ojo entre todo lo demás del período.
   const linea = (rotulo, campo, color) => {
     const c = f.CUP[campo], u = f.USD[campo];
     if (!c && !u) return '';
-    return `<div class="fila"><span>${rotulo}</span>
-      <b class="num"${color ? ' style="color:' + color + '"' : ''}>${dosMonedas(c, u)}</b></div>`;
+    return `<details class="renglon" data-sitio="${esc(clave)}" data-concepto="${campo}"
+        ontoggle="abrirDesglose(this)">
+      <summary class="fila"><span>${rotulo}</span>
+        <b class="num"${color ? ' style="color:' + color + '"' : ''}>${dosMonedas(c, u)}</b></summary>
+      <div class="desgl"></div>
+    </details>`;
   };
-  // Lo que quedó: lo que entró (con lo que le pasaron de otro sitio) menos todo
-  // lo que salió. Se calcula por moneda, nunca sumando las dos.
+  // Lo que se MOVIÓ en el período: lo que entró (con lo que le pasaron de otro
+  // sitio) menos todo lo que salió. Se calcula por moneda, nunca sumando las dos.
+  //
+  // OJO CON CÓMO SE LLAMA Y DE QUÉ COLOR VA. Esto se llamaba «saldo» y se pintaba
+  // en ROJO cuando daba negativo, y las dos cosas engañaban:
+  //
+  //   · «Saldo» junto al nombre de una tienda se lee como «esto es lo que tiene».
+  //     Y no lo es: el dinero que hay está abajo, en «Efectivo en caja». El día
+  //     que el dueño filtró por un día vio «-5.508» en rojo y entendió que su
+  //     tienda estaba en números rojos, cuando tenía 142.195 en la caja.
+  //   · Un período en negativo NO es un fallo: es un día en que salió más dinero
+  //     del que entró, que pasa cada vez que se reparten ganancias. El rojo en
+  //     esta tarjeta ya significa otra cosa —la caja en negativo, que sí es
+  //     imposible— y gastarlo aquí le quitaba fuerza a la señal de verdad.
+  //
+  // Verde cuando entra más de lo que sale, y color normal cuando no.
   const quedo = m => f[m].ingreso + f[m].recibido -
                      f[m].retiro - f[m].inversion - f[m].gasto - f[m].mandado;
+
+  // Y CON CUÁNTO SE CERRÓ EL PERÍODO. El 29 de agosto de 2026 el dueño lo dijo
+  // así: filtrando el día 26 veía «entró 130 y salió 4 638» y quería saber en
+  // qué quedaba su caja, que tenía 74 459. Cambiar el rótulo (28-ago) evitó que
+  // leyera el flujo como un saldo, pero no le dio el saldo, que era la pregunta.
+  //
+  // Ahora la tarjeta es un estado de cuenta de la caja:
+  //     tenía al empezar  +  lo que entró  −  lo que salió  =  quedó al terminar
+  // y el número grande de la cabecera es lo que quedó, que es lo que se fue a
+  // buscar. «Entró − salió» sigue estando, en pequeño y en su renglón.
+  //
+  // Se calcula sumando, NO se pide aparte: así los tres números que se ven en la
+  // pantalla cuadran siempre entre ellos. Pedirle al servidor el saldo final por
+  // su cuenta podría dar otra cifra y no habría forma de saber cuál miente (#22).
+  //
+  // Ojo con la tentación de sumarle a los 74 459 lo del día 26: esa cifra es la
+  // caja de HOY y ya lleva ese día dentro, así que cada peso contaría dos veces.
+  // Lo que se suma es lo que había la VÍSPERA del período.
+  const fin = m => ini[m] + quedo(m);
+  // Filtrando hasta hoy, «quedó al terminar» y el efectivo que hay ahora son la
+  // misma cifra, y enseñarla dos veces seguidas solo hace dudar de si son lo
+  // mismo. Mirando un día de atrás sí son distintas, y entonces las dos hacen
+  // falta: una es cómo cerró esa noche y la otra lo que hay en la gaveta hoy.
+  const cerroComoEsta = fin('CUP') === g.CUP && fin('USD') === g.USD;
   // 'ingreso' es el total de las tres entradas de arriba, asi que no hace falta
   // mirarlo aparte para saber si aqui no paso nada.
   const nada = ['ingreso', 'retiro', 'inversion', 'gasto', 'recibido', 'mandado']
@@ -2435,8 +2486,12 @@ function tarjetaDeSitio(p, verGan, esTotal) {
 
   // Una caja en negativo no existe: significa que falta un apunte o que
   // alguien se equivocó de sitio o de moneda al apuntar algo. Se dice, en vez
-  // de enseñar un número raro y dejar que cada uno se lo explique.
-  const enRojo = g.CUP < 0 || g.USD < 0;
+  // de enseñar un número raro y dejar que cada uno se lo explique. Vale igual
+  // para la de hoy y para cómo cerró el período: las dos son cajas.
+  const enRojo = g.CUP < 0 || g.USD < 0 || fin('CUP') < 0 || fin('USD') < 0;
+  const colorCaja = enRojo ? 'var(--rojo)' : 'var(--marca-claro)';
+  const colorFlujo = quedo('CUP') >= 0 && quedo('USD') >= 0
+    ? 'var(--marca-claro)' : 'var(--texto2)';
 
   return `<details class="tarjeta plegable" style="margin-bottom:10px${
       esTotal ? ';border-color:var(--marca-claro)' : ''}"${esTotal ? ' open' : ''}>
@@ -2444,30 +2499,37 @@ function tarjetaDeSitio(p, verGan, esTotal) {
       <div class="nmPleg">${esTotal ? 'TOTAL DE LA EMPRESA' : esc(p.sitio)}
         <small>${esTotal ? 'La suma de todos los sitios'
           : (p.tipo === 'almacen' ? 'almacén' : p.tipo === 'negocio' ? 'sin punto' : 'punto') +
-            ' · en caja ' + dosMonedas(g.CUP, g.USD)}</small></div>
-      <div class="cifPleg" style="color:${quedo('CUP') >= 0 && quedo('USD') >= 0
-        ? 'var(--marca-claro)' : 'var(--rojo)'}">${dosMonedas(quedo('CUP'), quedo('USD'))}
-        <div style="font-weight:500;font-size:11px;color:var(--texto3)">saldo</div></div>
+            ' · en caja hoy ' + dosMonedas(g.CUP, g.USD)}</small></div>
+      <div class="cifPleg" style="color:${colorCaja}">${dosMonedas(fin('CUP'), fin('USD'))}
+        <div style="font-weight:500;font-size:11px;color:var(--texto3)">${
+          cerroComoEsta ? 'lo que hay en la caja' : 'quedó al terminar'}</div></div>
     </summary>
     <div class="cuerpoPleg">
-    ${nada ? '<div class="pista" style="margin:0">No se movió dinero aquí en este período.</div>'
-      : linea('Ingresos por ventas', 'de_ventas', 'var(--marca-claro)') +
+    ${nada ? '<div class="pista" style="margin:0">No se movió dinero aquí en este período. La caja ' +
+        'sigue con los <b>' + dosMonedas(fin('CUP'), fin('USD')) + '</b> con que empezó.</div>'
+      : `<div class="fila" style="border-bottom:1.5px solid var(--borde)">
+          <span style="font-weight:700">Tenía al empezar</span>
+          <b class="num">${dosMonedas(ini.CUP, ini.USD)}</b></div>` +
+        linea('Ingresos por ventas', 'de_ventas', 'var(--marca-claro)') +
         linea('Otros ingresos', 'de_otros', 'var(--marca-claro)') +
         linea('Recibido de otro sitio', 'recibido') +
         linea('Retiros', 'retiro') +
         linea('Inversiones', 'inversion') +
         linea('Gastos', 'gasto') +
         linea('Mandado a otro sitio', 'mandado') +
-        `<div class="fila" style="border-top:1.5px solid var(--borde);margin-top:5px;padding-top:9px">
-          <span style="font-weight:700">Saldo del período</span>
-          <b class="num" style="color:${quedo('CUP') >= 0 && quedo('USD') >= 0
-            ? 'var(--marca-claro)' : 'var(--rojo)'}">${dosMonedas(quedo('CUP'), quedo('USD'))}</b>
+        `<div class="fila">
+          <span style="color:var(--texto3);font-size:12.5px">Entró menos salió, en este período</span>
+          <b class="num" style="font-size:14px;color:${colorFlujo}">${
+            dosMonedas(quedo('CUP'), quedo('USD'))}</b></div>
+        <div class="fila" style="border-top:1.5px solid var(--borde);margin-top:5px;padding-top:9px">
+          <span style="font-weight:700">Quedó al terminar</span>
+          <b class="num" style="color:${colorCaja}">${dosMonedas(fin('CUP'), fin('USD'))}</b>
         </div>`}
     ${ganancias}
-    <div class="fila" style="border:0">
-      <span style="color:var(--texto3);font-size:12.5px">Efectivo en caja</span>
+    ${cerroComoEsta && !nada ? '' : `<div class="fila" style="border:0">
+      <span style="color:var(--texto3);font-size:12.5px">Efectivo en caja hoy</span>
       <b class="num" style="font-size:14px${enRojo ? ';color:var(--rojo)' : ''}">${
-        dosMonedas(g.CUP, g.USD)}</b></div>
+        dosMonedas(g.CUP, g.USD)}</b></div>`}
     ${enRojo ? '<div class="aviso" style="text-align:left;margin:0">Esta caja está en ' +
       '<b>negativo</b>, y eso no puede ser: de ahí ha salido más dinero del que entró. ' +
       'Casi siempre es un movimiento cargado al sitio equivocado, o en la moneda equivocada. ' +
@@ -2475,6 +2537,93 @@ function tarjetaDeSitio(p, verGan, esTotal) {
     </div>
   </details>`;
 }
+// ─── De qué está hecho un renglón ─────────────────────────────
+// Se pide al ABRIR y no antes. Una tarjeta tiene hasta ocho renglones y en la
+// pantalla hay cinco tarjetas: cargarlo todo de entrada son cuarenta consultas
+// para enseñar algo que casi nadie va a abrir, y en un teléfono con la conexión
+// de allá eso se nota.
+//
+// Y se pide UNA sola vez: lo que ya se trajo se queda puesto, que cerrar y
+// volver a abrir no es volver a preguntar. Si la consulta falla se borra la
+// marca, para que el segundo intento sí salga.
+async function abrirDesglose(d) {
+  if (!d.open || d.dataset.hecho) return;
+  d.dataset.hecho = '1';
+  const caja = d.querySelector('.desgl');
+  caja.innerHTML = '<div class="pista" style="margin:6px 0">Buscando…</div>';
+  // El período es el mismo de la pantalla, sacado de donde lo saca todo lo
+  // demás: si se guardara aquí una copia, cambiar el filtro dejaría los
+  // renglones ya abiertos enseñando lo de antes.
+  const r = rangoFondo();
+  try {
+    const x = await api('/api/negocio/desglose' +
+      '?concepto=' + encodeURIComponent(d.dataset.concepto) +
+      '&sitio_id=' + encodeURIComponent(d.dataset.sitio) +
+      '&desde=' + r.desde + '&hasta=' + r.hasta);
+    caja.innerHTML = pintarDesglose(x);
+  } catch (e) {
+    d.dataset.hecho = '';
+    caja.innerHTML = '<div class="pista" style="margin:6px 0">' + esc(e.message) + '</div>';
+  }
+}
+
+// Cada apunte con lo que se pueda decir de él sin abrir otra pantalla: de una
+// venta, los productos que llevaba con su cantidad y su precio; de una compra,
+// su número y su nombre; de un traspaso, con qué caja fue.
+//
+// El importe va SIEMPRE con su moneda al lado, la del apunte. Los precios de
+// las líneas están en esa misma moneda —es lo que el cliente pagó—, así que se
+// escriben con ella y no con la del negocio.
+function pintarDesglose(x) {
+  if (!x.apuntes.length)
+    return '<div class="pista" style="margin:6px 0">Ningún apunte en este período.</div>';
+  const cuerpo = x.apuntes.map(a => {
+    const de = a.de || {};
+    // Un apunte anulado y el contrario que lo anula suman cero, y los dos
+    // cuentan arriba. Se enseñan tachados, no escondidos: si se quitaran, este
+    // desglose no sumaría lo que dice el renglón.
+    const muerto = a.anulado || a.anula_a;
+    let pie = a.fecha;
+    if (a.sitio && x.sitio_id === '*') pie += ' · ' + a.sitio;
+    if (a.persona) pie += ' · ' + a.persona;
+    if (de.tipo === 'venta' && de.cliente) pie += ' · ' + de.cliente;
+    if (de.tipo === 'inversion') pie += ' · compra ' + (de.numero || '') +
+      (de.proveedor ? ' · ' + de.proveedor : '');
+    if (de.tipo === 'traspaso' && de.otra_caja)
+      pie += (a.tipo === 'ingreso' ? ' · de ' : ' · a ') + de.otra_caja;
+    if (a.anulado) pie += ' · anulado';
+    if (a.anula_a) pie += ' · anula a otro';
+
+    const titulo = a.concepto ||
+      (de.tipo === 'inversion' ? (de.nombre || 'Compra de mercancía')
+       : de.tipo === 'venta' ? 'Venta' : a.subtipo || a.tipo);
+    const productos = de.tipo === 'venta' && de.lineas && de.lineas.length
+      ? de.lineas.map(l => `<div class="prod">
+          <span>${esc(l.nombre)} · ${l.cantidad}${l.um ? ' ' + esc(l.um) : ''} × ${
+            dinero(l.precio_unit, a.moneda)}</span>
+          <b>${dinero(l.importe, a.moneda)}</b></div>`).join('')
+      : '';
+    return `<div class="ap${muerto ? ' muerto' : ''}">
+        <span>${esc(titulo)}<small>${esc(pie)}</small></span>
+        <b>${dinero(Math.abs(a.importe), a.moneda)}${a.importe < 0 ? ' (al revés)' : ''}</b>
+      </div>${productos}`;
+  }).join('');
+  // El total de abajo tiene que dar el mismo número que el renglón de arriba, y
+  // por eso lo suma el servidor de la tabla entera y no de los apuntes que
+  // mandó: si un período largo se corta, el total sigue siendo el de verdad y se
+  // avisa de que la lista está cortada.
+  //
+  // Con UN solo apunte no se pone: «4 638 · Suman 4 638» es el mismo número dos
+  // veces seguidas, y eso no aclara nada, solo hace dudar de si son dos cosas.
+  const suma = x.apuntes.length === 1 && !x.hay_mas ? ''
+    : `<div class="ap" style="border-top:1.5px solid var(--borde);font-weight:700">
+        <span>Suman${x.hay_mas ? ' (los ' + x.cuantos + ', no solo los de arriba)' : ''}</span>
+        <b>${dosMonedas(x.total.CUP, x.total.USD)}</b></div>`;
+  return cuerpo + suma +
+    (x.hay_mas ? '<div class="pista">Se enseñan los ' + x.apuntes.length +
+      ' más recientes de ' + x.cuantos + '. Para verlos todos, acorta el período.</div>' : '');
+}
+
 // Las dos monedas, una al lado de la otra y con un «+» que no es una suma: son
 // dos cifras distintas que no se pueden juntar (DECISIONES.md #21).
 const dosMonedas = (cup, usd) => !cup && !usd ? dinero(0, MONEDA_BASE)
@@ -2834,19 +2983,18 @@ function abrirFondo(tipo, apunte) {
   $('fo-subtipo').innerHTML = (tipo === 'inversion' ? '<option value="">Elige…</option>' : '') +
     SUBTIPOS[tipo].map(s => `<option>${esc(s)}</option>`).join('');
   $('fo-subtipo-lbl').textContent = tipo === 'inversion' ? 'Tipo de inversión *' : 'Tipo';
-  // De qué caja sale (o entra) el dinero. En lo que SALE es obligatorio y no hay
-  // «ninguno en concreto»: el dinero sale de una caja de verdad, y dejarlo sin decir
-  // hacía que la gaveta de ese sitio siguiera diciendo que tiene un dinero que ya no
-  // está (DECISIONES.md #37). En un ingreso a mano sigue siendo opcional: un aporte
-  // de un socio puede no entrar por ninguna tienda.
-  const exigeSitio = tipo === 'retiro' || tipo === 'gasto' || tipo === 'inversion';
-  $('fo-sitio-lbl').textContent = exigeSitio ? 'Sale de la caja de *' : 'Sitio (opcional)';
-  $('fo-sitio').innerHTML = (exigeSitio ? '<option value="">Elige…</option>'
-                                        : '<option value="">Ninguno en concreto</option>') +
+  // En qué caja pasa el dinero. SIEMPRE hay que decirlo, también en el ingreso:
+  // hasta el 31 de agosto de 2026 aquí había un «Ninguno en concreto» y se quitó.
+  // El dinero entra en una caja de verdad, y no decir cuál dejaba esa gaveta sin
+  // contar un dinero que sí está dentro — el mismo fallo de la #37, visto por el
+  // otro lado. El servidor lo rechaza igual (#10).
+  const entra = tipo === 'ingreso';
+  $('fo-sitio-lbl').textContent = entra ? 'Entra en la caja de *' : 'Sale de la caja de *';
+  $('fo-sitio').innerHTML = '<option value="">Elige…</option>' +
     SITIOS.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
-  // Viene puesta la caja del sitio en el que se está trabajando, que es de donde
-  // sale el dinero nueve de cada diez veces.
-  if (exigeSitio && SITIOS.some(s => s.id === sitioActual())) $('fo-sitio').value = sitioActual();
+  // Viene puesta la caja del sitio en el que se está trabajando, que es por donde
+  // pasa el dinero nueve de cada diez veces.
+  if (SITIOS.some(s => s.id === sitioActual())) $('fo-sitio').value = sitioActual();
   // La pista de debajo la escribe pintarCajaFondo(), al final: dice lo mismo y
   // además cuánto hay en la caja elegida.
   // Una inversión EN MERCANCÍA no se apunta aquí: se hace en su pantalla, con
@@ -2913,16 +3061,30 @@ function abrirFondo(tipo, apunte) {
 // Si no dejan ver el fondo no llegan las gavetas y no se enseña saldo ninguno,
 // que es mejor que enseñar un cero que parece uno de verdad (decisión #38).
 function pintarCajaFondo() {
-  const exigeSitio = fondoTipo === 'retiro' || fondoTipo === 'gasto' || fondoTipo === 'inversion';
-  if (!exigeSitio) { $('fo-sitio-pista').textContent = ''; return; }
-  const base = 'Hay que decir de qué caja sale: es lo que hace que la gaveta de ese sitio '
-    + 'cuadre con el dinero que tiene dentro de verdad.';
+  // La pista dice dos cosas distintas según por dónde va el dinero. En lo que
+  // SALE, el aviso que importa es que no se puede sacar más de lo que hay (#38).
+  // En un INGRESO no hay tope ninguno —se está metiendo—, así que enseñar «no se
+  // puede sacar más» ahí sería un aviso que no viene a cuento; lo útil es con
+  // cuánto se queda esa caja.
+  const entra = fondoTipo === 'ingreso';
+  const base = entra
+    ? 'Hay que decir en qué caja entra: es lo que hace que esa gaveta cuadre con el '
+      + 'dinero que tiene dentro de verdad.'
+    : 'Hay que decir de qué caja sale: es lo que hace que la gaveta de ese sitio '
+      + 'cuadre con el dinero que tiene dentro de verdad.';
   const id = $('fo-sitio').value;
   const gav = (FONDO && FONDO.gavetas) || null;
   if (!id || !gav) { $('fo-sitio-pista').textContent = base; return; }
   const g = gav.find(x => x.sitio_id === id), m = $('fo-moneda').value;
-  $('fo-sitio-pista').innerHTML = 'En esa caja hay <b>' + dinero(g ? g[m] || 0 : 0, m) +
-    '</b>. No se puede sacar más de lo que hay.';
+  const hay = g ? g[m] || 0 : 0;
+  if (!entra) {
+    $('fo-sitio-pista').innerHTML = 'En esa caja hay <b>' + dinero(hay, m) +
+      '</b>. No se puede sacar más de lo que hay.';
+    return;
+  }
+  const suma = parseFloat($('fo-importe').value) || 0;
+  $('fo-sitio-pista').innerHTML = 'En esa caja hay <b>' + dinero(hay, m) + '</b>' +
+    (suma ? ', y con esto quedarán <b>' + dinero(hay + suma, m) + '</b>.' : '.');
 }
 function cerrarFondo() { $('velo-fondo').classList.remove('abierto'); fondoEditando = null; }
 

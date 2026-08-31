@@ -1435,6 +1435,132 @@ que ya no se puede deshacer — y que el criterio siga viviendo en una sola func
 
 ---
 
+## 41. La tarjeta de Dinero es un estado de cuenta, y cada renglón se abre
+
+Filtrando un día, la tarjeta de un sitio contestaba una sola cosa: qué se movió
+ese día. Quedaban dos preguntas fuera, y las dos son las que se van a hacer
+mirándola: **en qué queda la caja**, y **de qué está hecho cada renglón**
+—«ingresos por ventas 166 USD, ¿cuáles ventas, de qué, a cómo?»—.
+
+### Cambiar el rótulo no bastaba
+
+La cifra grande se llamaba «saldo», que se lee como «esto es lo que tiene». No lo
+era: era lo que se movió. Llamarla «entró − salió» quita el malentendido, pero
+**no contesta la pregunta**. Quien mira un día atrás no quiere saber cuánto se
+movió: quiere saber **con cuánto se cerró esa noche**. Un rótulo honesto que no
+contesta sigue mandando a la persona a hacer la cuenta a mano, que es de donde
+sale el error la primera vez.
+
+Ahora la tarjeta enseña las tres cosas, en este orden:
+
+```
+Tenía al empezar        79 097 CUP + 439.00 USD   ← saldo la víspera del período
+  Ingresos por ventas               166.00 USD    ← lo que se movió, por concepto
+  Otros ingresos           130 CUP +  10.00 USD
+  Retiros                         4 638 CUP
+  Gastos                          1 000 CUP
+  Entró menos salió       -5 508 CUP + 176.00 USD
+Quedó al terminar        73 589 CUP + 615.00 USD   ← y con cuánto se cerró
+```
+
+Y el número grande de la cabecera es **lo que quedó**, no lo que se movió.
+
+### El atajo que parece obvio es el único que no vale
+
+Sumarle al efectivo que hay HOY lo que entró y salió un día pasado cuenta ese día
+**dos veces**: el efectivo de hoy ya lo lleva dentro. Lo que se suma es el saldo de
+la **víspera** (`fecha < desde`). Un número que cuadra por dentro y miente por
+fuera es peor que no dar ninguno.
+
+**No rompe la #22.** Aquella dice que lo que pasó y lo que hay son dos tablas
+distintas, y sigue siendo verdad: aquí no se mete un saldo *dentro* de un
+período, se ponen **los dos extremos** del período, cada uno con su rótulo y su
+fecha. Y «Efectivo en caja hoy» solo aparece cuando **es distinto** de lo que
+quedó; filtrando hasta hoy son la misma cifra y enseñarla dos veces seguidas solo
+hace dudar de si son lo mismo.
+
+**Se suma, no se pide aparte.** `quedó = tenía + entró − salió`, calculado en la
+pantalla. Pedirle al servidor el saldo final por su cuenta podría dar otra cifra y
+no habría forma de saber cuál miente — la misma regla del total de la #22.
+
+### Cada renglón se abre, y enseña de qué está hecho
+
+`GET /api/negocio/desglose?concepto=&sitio_id=&desde=&hasta=` devuelve los apuntes
+que suman un renglón. De una **venta**, los productos con su cantidad, su precio y
+su importe; de una **compra**, su número y su nombre; de un **traspaso**, con qué
+caja fue.
+
+**La condición que saca el desglose es la MISMA que suma el renglón**, escrita una
+sola vez, en el mapa `DESGLOSE` de `server.js`, pegado al bucle que llena `fondo`.
+Un `WHERE` parecido pero no igual daría un desglose que no suma lo que dice el
+renglón de encima, y nadie sabría cuál de los dos miente. La prueba compara los
+dos, concepto por concepto, en cada sitio y en el total.
+
+**Va cerrado y se pide al abrir.** Son ocho renglones por tarjeta y varias
+tarjetas: cargarlo todo de entrada son decenas de consultas para algo que casi
+nadie va a abrir, y en un teléfono con la conexión de allá eso se nota. Y se pide
+una sola vez: cerrar y volver a abrir no vuelve a preguntar.
+
+**Aquí los anulados SÍ salen**, tachados. Es lo contrario que en la lista de
+Movimientos, y a propósito: allí el error, la corrección y la resta estorban;
+aquí el renglón de arriba cuenta los dos —suman cero— y esconderlos dejaría un
+desglose que no cuadra, que es justo lo que se viene a comprobar.
+
+**El total lo suma el servidor de la tabla entera**, no de los apuntes que manda.
+La lista se corta en 300 y lo avisa; si se sumaran solo esos, un período largo
+enseñaría un total más chico que el renglón de arriba.
+
+**Y se ve lo que se puede ver** (#10 y #39). La puerta la abren tres permisos
+porque la pantalla de Dinero se arma con varias cosas, pero el dinero lo abre
+`ver_fondo` y nada más. Quien manda en un local pide el desglose de su local: el
+de otro y el del dinero de la empresa se le niegan, y su «total» es el de sus
+locales, no el del negocio.
+
+`pruebas/desglose.js`, banco nuevo: la víspera y el cierre encadenados día a día,
+que mirándolo todo lo que quedó es el efectivo que hay, los conceptos cuadrando con
+su desglose en dos sitios y en el total, la venta con sus líneas y la cantidad al
+derecho, el anulado que sale y suma cero, el concepto inventado que da 400, y los
+tres 403 de quien solo manda en su tienda.
+
+---
+
+## 42. Todo apunte a mano dice en qué caja pasa el dinero, el ingreso también
+
+El ingreso tenía un **«Ninguno en concreto»** y se quitó el 31 de agosto de 2026.
+Es la **#37 vista por el otro lado**: aquella obligó a decir de qué caja SALE el
+dinero, porque si no, la gaveta de ese sitio seguía diciendo que tiene un dinero
+que ya no está. Con lo que ENTRA pasa lo simétrico: el dinero entra físicamente en
+alguna caja, y no decir cuál deja esa gaveta sin contar un dinero que sí está
+dentro. En los dos casos el efectivo apuntado deja de cuadrar con el que se puede
+ir a contar, que es justo para lo que sirve.
+
+**Ojo con no juntar las dos listas.** `SALE_DE_UNA_CAJA` es la de la #38 —la que
+comprueba que el dinero ESTÉ dentro antes de sacarlo— y el ingreso **no** va ahí:
+no tiene que estar dentro de nada, lo está metiendo. Juntarlas prohibiría ingresar
+en una caja vacía, que es exactamente lo que hace falta para abrir una tienda
+nueva. Son dos preguntas distintas y son dos cosas distintas en el código.
+
+**Los apuntes viejos sin sitio no se tocan** (#2). La fila «De la empresa» sigue
+existiendo y sumando lo que sumaba; simplemente ya no se le añade nada nuevo. Y al
+**corregir** uno de esos, ahora hay que elegir caja — que es lo correcto:
+corregirlo es la ocasión de arreglarlo.
+
+**La pista de debajo cambia según por dónde va el dinero.** En lo que sale dice
+«no se puede sacar más de lo que hay»; en un ingreso eso no viene a cuento —no hay
+tope— y lo útil es con cuánto se queda esa caja.
+
+`pruebas/desglose.js` comprueba que un ingreso sin caja se rechaza y **dice por
+qué**, que con caja entra, que se puede ingresar en una caja vacía, y que el apunte
+heredado sin sitio sigue contando. Y `pruebas/pantallas.js` comprueba las dos
+listas por separado, para que nadie las junte sin darse cuenta.
+
+**Sembrar un apunte sin sitio ya no se puede por la puerta**, así que las pruebas
+que lo necesitaban lo escriben directo en la base, con un ayudante que se llama
+`apunteHeredadoSinSitio` y dice en su comentario exactamente eso: es un registro
+del pasado, no algo que la aplicación pueda crear hoy.
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía

@@ -343,8 +343,35 @@ comp('y dice si el dinero entró por una venta o por otra cosa',
   ["'Ingresos por ventas', 'de_ventas'",
    "'Otros ingresos', 'de_otros'"].every(t => js.includes(t)) &&
   /f\.origen === 'venta' \? 'de_ventas'/.test(servidor));
-comp('y el saldo del período, calculado por moneda y nunca sumando las dos',
-  /const quedo = m => f\[m\]\.ingreso/.test(js) && /Saldo del período/.test(js));
+comp('y lo que se movió en el período, por moneda y nunca sumando las dos',
+  /const quedo = m => f\[m\]\.ingreso/.test(js) && /Entró menos salió/.test(js));
+// El rótulo de la cabecera decía «saldo» a secas, junto al nombre de la tienda,
+// y eso se lee como «esto es lo que tiene»: filtrando un día se podía ver
+// «-5.508» y entender que la tienda estaba en números rojos teniendo 142.195 en
+// la caja.
+comp('la cifra de la cabecera NO se llama «saldo», que se confunde con lo que hay',
+  !/>saldo<\/div>/.test(js));
+// Cambiar el rótulo evita el malentendido pero no contesta la pregunta, que es
+// «¿y en qué queda mi caja?». La tarjeta es un ESTADO DE CUENTA y la cabecera
+// enseña con cuánto se cerró el período.
+comp('la cabecera dice con cuánto se cerró el período, que es lo que se preguntaba',
+  /quedó al terminar/.test(js) && /lo que hay en la caja/.test(js));
+comp('y la tarjeta lo explica entera: tenía, se movió, quedó',
+  /Tenía al empezar/.test(js) && /Entró menos salió/.test(js) &&
+  /Quedó al terminar/.test(js));
+// Se SUMA, no se pide aparte: los tres números de la pantalla tienen que cuadrar
+// entre ellos siempre. Y lo que se suma es la víspera, no el efectivo de hoy,
+// que ya lleva el período dentro y contaría cada peso dos veces.
+comp('lo que quedó se calcula sumando la víspera con lo que se movió',
+  /const fin = m => ini\[m\] \+ quedo\(m\)/.test(js) &&
+  /gaveta_inicio/.test(servidor) && /FROM fondo WHERE fecha < \?/.test(servidor));
+// Y un período en negativo no se pinta de rojo: no es un fallo, es un día en el
+// que salió más de lo que entró. El rojo de esta tarjeta está reservado para la
+// caja en negativo, que sí es imposible, y gastarlo aquí le quita fuerza.
+comp('un período negativo no se pinta de rojo; la caja en negativo sí',
+  /quedo\('CUP'\) >= 0 && quedo\('USD'\) >= 0[\s\S]{0,60}var\(--texto2\)/.test(js) &&
+  /const enRojo = g\.CUP < 0 \|\| g\.USD < 0/.test(js) &&
+  /Esta caja está en /.test(js));
 // Los rótulos los eligió el dueño: son los que va a leer alguien de fuera.
 comp('los rótulos son de oficina, no de conversación',
   !/Entró vendiendo|Entró por trabajos|>Quedó</.test(js) &&
@@ -363,6 +390,21 @@ comp('cada sitio se enseña plegado, con lo que le quedó a la vista',
   /\.plegable > summary\{/.test(css));
 comp('el total del negocio viene abierto: es el resumen',
   /\$\{esTotal \? ' open' : ''\}/.test(js));
+// Y dentro, cada renglón se abre para enseñar de qué está hecho: qué ventas
+// fueron esos 166 USD, con sus productos y sus precios. Pedido el 29 de agosto
+// de 2026, con la condición de que fuera opcional y no alargara la pantalla.
+comp('cada renglón se puede abrir para ver los apuntes que lo suman',
+  /<details class="renglon"/.test(js) && /ontoggle="abrirDesglose\(this\)"/.test(js) &&
+  /\.renglon > summary\{/.test(css));
+comp('viene cerrado, que abrir los ocho de cada tienda alargaría la pantalla',
+  !/<details class="renglon"[^>]* open/.test(js));
+comp('y se pide al abrir, una sola vez, no al cargar la pantalla',
+  /if \(!d\.open \|\| d\.dataset\.hecho\) return;/.test(js));
+comp('el servidor lo contesta con la MISMA condición con que suma el renglón',
+  /const DESGLOSE = \{/.test(servidor) && /\/api\/negocio\/desglose/.test(servidor) &&
+  /de_ventas:\s+"f\.tipo='ingreso' AND COALESCE\(f\.ref_tipo,''\)='venta'"/.test(servidor));
+comp('una venta enseña sus productos, y un apunte anulado sale tachado',
+  /class="prod"/.test(js) && /\.desgl \.muerto/.test(css));
 comp('los movimientos también se pliegan', /id="fo-cuenta"/.test(html));
 comp('y los botones de dinero están juntos, no repartidos por la pantalla',
   /abrirFondo\('ingreso'\)[\s\S]{0,300}abrirFondo\('retiro'\)[\s\S]{0,300}abrirFondo\('gasto'\)/.test(html));
@@ -452,15 +494,27 @@ comp('el mes y la lista de comisiones están dentro de esa pantalla',
 const ajGente = (html.match(/id="aj-gente"[\s\S]*?fin de La gente/) || [''])[0];
 comp('en Ajustes ya no queda la lista, solo el aviso de dónde está',
   !/id="lista-comisiones"/.test(ajGente) && /Dinero → Comisiones/.test(ajGente));
-// Y el dinero que SALE tiene que decir de qué caja. Se comprueba en el servidor,
-// que es quien manda; esconder la opción en la pantalla es decoración (#10).
-comp('el servidor exige el sitio en retiros, gastos e inversiones',
-  /SALE_DE_UNA_CAJA = \['retiro', 'gasto', 'inversion'\]/.test(servidor) &&
-  /function sitioDelApunte/.test(servidor));
+// Y TODO apunte a mano tiene que decir en qué caja pasa el dinero —desde el
+// 31-ago-2026 también el ingreso—. Se comprueba en el servidor, que es quien
+// manda; esconder la opción en la pantalla es decoración (#10).
+comp('el servidor exige el sitio en TODO apunte a mano, ingreso incluido',
+  /function sitioDelApunte/.test(servidor) &&
+  /if \(!b\.sitio_id\) return b\.tipo === 'ingreso'/.test(servidor));
 comp('y lo comprueba tanto al apuntar como al corregir',
   (servidor.match(/sitioDelApunte\(/g) || []).length >= 3);
-comp('la pantalla ya no ofrece «ninguno en concreto» en lo que sale',
-  /exigeSitio \? '<option value="">Elige…<\/option>'/.test(js));
+// Se busca la OPCIÓN, no las palabras: el comentario que explica por qué se
+// quitó las lleva dentro, y buscarlas sueltas daba por malo lo que está bien.
+comp('la pantalla ya no ofrece «ninguno en concreto» en ningún tipo',
+  !/<option value="">Ninguno en concreto<\/option>/i.test(js) &&
+  /\$\('fo-sitio'\)\.innerHTML = '<option value="">Elige…<\/option>'/.test(js));
+// Pero la lista de «de aquí sale dinero» NO puede llevar el ingreso: es la que
+// comprueba que el dinero ESTÉ dentro (#38), y un ingreso no tiene que estar
+// dentro de nada porque lo está metiendo. Mezclarlas prohibiría ingresar en una
+// caja vacía, que es justo lo que hay que poder hacer.
+comp('pero el ingreso NO entra en la comprobación de «hay dinero para sacarlo»',
+  /SALE_DE_UNA_CAJA = \['retiro', 'gasto', 'inversion'\]/.test(servidor));
+comp('y el rótulo dice si el dinero entra o sale de esa caja',
+  /Entra en la caja de \*/.test(js) && /Sale de la caja de \*/.test(js));
 
 console.log('\n=== Las palabras de la pantalla ===');
 // Pedido por el dueño: «hay palabras que no son muy profesionales».
