@@ -21,7 +21,7 @@ const forge = require('node-forge');
 // Antes de cargar el módulo: que trabaje en una carpeta de usar y tirar. Si
 // estas pruebas borraran el sello de verdad, habría que reinstalarlo en todos
 // los aparatos del negocio.
-const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'qs-cert-'));
+const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-cert-'));
 process.env.DP_CERTS = patio;
 const certificados = require('../certificados');
 

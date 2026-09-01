@@ -27,7 +27,7 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
 const raiz = path.join(__dirname, '..');
-const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'qs-act-'));
+const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-act-'));
 const Database = require('better-sqlite3');
 
 let ok = 0, mal = 0;

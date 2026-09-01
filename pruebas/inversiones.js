@@ -14,7 +14,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const raiz = path.join(__dirname, '..');
-const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'qs-inv-'));
+const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-inv-'));
 
 let ok = 0, mal = 0;
 const comp = (nombre, cierto, extra) => {

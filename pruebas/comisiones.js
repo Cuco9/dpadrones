@@ -25,7 +25,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const raiz = path.join(__dirname, '..');
-const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'qs-comis-'));
+const patio = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-comis-'));
 
 let ok = 0, mal = 0;
 const comp = (nombre, cierto, extra) => {
@@ -79,9 +79,15 @@ const mesHoy = hoy.slice(0, 7);
 const otroDia = (() => {
   const d = new Date(); d.setDate(d.getDate() - 3);
   const f = d.toLocaleDateString('sv-SE');
-  // Si al restar tres días se cambia de mes, se usa el día 1 de este mes: todo
+  // Si al restar tres días se cambia de mes, se usa otro día de ESTE mes: todo
   // el banco mira UN mes, y una fecha del mes anterior lo dejaría fuera.
-  return f.slice(0, 7) === mesHoy ? f : mesHoy + '-01';
+  //
+  // Y ese otro día no puede ser el 1 cuando hoy ES el 1: los «dos días» serían
+  // el mismo, la venta del día sin lista caería dentro del día con lista y las
+  // comisiones saldrían sumadas. Este banco se ponía rojo cada día 1 de mes
+  // —cuatro comprobaciones— sin que nada estuviera roto en la aplicación.
+  if (f.slice(0, 7) === mesHoy) return f;
+  return hoy.endsWith('-01') ? mesHoy + '-03' : mesHoy + '-01';
 })();
 
 const comisiones = (mes) => pedir('/api/comisiones?mes=' + (mes || mesHoy));
