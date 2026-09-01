@@ -1,5 +1,5 @@
-19e6ae1
-# Lo que corre en el VPS ahora mismo (31-ago-2026, 16:09).
+70aa31f
+# Lo que corre en el VPS ahora mismo (1-sep-2026).
 #
 # Solo se lee la PRIMERA línea, y tiene que ser un commit que exista en git.
 # Con él, pruebas/actualizar.js fabrica una base con el código desplegado, la
