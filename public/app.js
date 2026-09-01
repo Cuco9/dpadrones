@@ -289,6 +289,19 @@ function abrirFicha(id) {
   $('f-precio-moneda').value = p ? (p.precio_moneda || 'CUP') : 'CUP';
   equivalencia();
   $('f-stockmin').value = p ? p.stock_min : '';
+
+  // La existencia inicial solo se pregunta al CREAR, y solo a quien puede mover
+  // mercancía: apuntarla es registrar una entrada, y eso tiene su propio permiso.
+  // Quien solo lleva el catálogo no ve la casilla, porque el servidor le
+  // rechazaría la entrada cuando el producto ya estuviera creado.
+  const puedeExistencia = !p && puedo('gestionar_inventario');
+  $('f-existencia-caja').style.display = puedeExistencia ? 'block' : 'none';
+  $('f-existencia').value = '';
+  if (puedeExistencia) {
+    const donde = (SITIOS.find(s => s.id === sitioActual()) || {}).nombre || 'este sitio';
+    $('f-existencia-pista').innerHTML = 'Se apunta como entrada de mercancía en <b>' +
+      esc(donde) + '</b>, al costo de arriba. Déjalo vacío si todavía no ha llegado.';
+  }
   $('f-comision').value = p && p.comision > 0 ? p.comision : '';
   $('f-comision-tipo').value = p ? String(p.comision_pct || 0) : '0';
   // Se abre en la moneda del negocio porque lo guardado ESTÁ en esa moneda.
@@ -322,6 +335,14 @@ async function guardarProducto() {
   if (!nombre) { toast('⚠ Ponle nombre al producto'); $('f-nombre').focus(); return; }
   const precio = parseFloat($('f-precio').value) || 0;
   if (precio <= 0) { toast('⚠ Ponle precio de venta'); $('f-precio').focus(); return; }
+  // Se mira ANTES de crear nada: si la cantidad está mal, se avisa con el
+  // producto todavía sin crear y se arregla escribiéndola bien. Después ya no,
+  // porque el producto existiría y volver a darle a Guardar crearía otro.
+  const existencia = existenciaEscrita();
+  if (existencia !== null && !(existencia > 0)) {
+    toast('⚠ La cantidad que hay tiene que ser mayor que cero');
+    $('f-existencia').focus(); return;
+  }
 
   const cuerpo = {
     nombre,
@@ -363,11 +384,18 @@ async function guardarProducto() {
       toast('✓ Producto actualizado');
     } else {
       const r = await api('/api/productos', { method: 'POST', body: JSON.stringify(cuerpo) });
+      // La existencia con la que nace el producto es una ENTRADA, no un campo
+      // suyo (#1), y va después de crearlo porque hasta aquí no hay a qué
+      // producto apuntarla.
+      const aviso = await apuntarExistenciaInicial(r.id, cuerpo.costo, existencia);
       // Sin impresora, este código hay que escribirlo a mano en el producto. Si
       // solo saliera en un aviso que se va solo, habría que buscarlo después.
       cerrarFicha();
       await cargarCatalogo();
-      mostrarCodigoNuevo(r.codigo, nombre);
+      // El almacén se repinta entero: acaba de entrar mercancía y la lista, el
+      // valor del inventario y el reparto por sitios se han quedado viejos.
+      if ($('p-almacen').classList.contains('activa')) await cargarAlmacen();
+      mostrarCodigoNuevo(r.codigo, nombre, aviso);
       return;
     }
     cerrarFicha();
@@ -375,11 +403,56 @@ async function guardarProducto() {
   } catch (e) { alert('No se pudo guardar: ' + e.message); }
 }
 
+// Lo escrito en «¿Cuánto tienes ahora?», o null si la casilla no está a la vista
+// o se dejó vacía. Vacío y cero no son lo mismo aquí: vacío es «todavía no ha
+// llegado» y no apunta nada; un cero escrito a mano es un despiste que conviene
+// devolver, porque una entrada de cero unidades no existe.
+function existenciaEscrita() {
+  const caja = $('f-existencia-caja');
+  if (!caja || caja.style.display === 'none') return null;
+  const txt = ($('f-existencia').value || '').trim();
+  if (txt === '') return null;
+  const n = parseFloat(txt);
+  return isNaN(n) ? 0 : n;
+}
+
+// Apunta la entrada con la que nace el producto. Devuelve null si fue bien, o
+// el aviso que hay que enseñar si no: el producto YA está creado, así que
+// tragarse el fallo dejaría el inventario diciendo cero con la mercancía en el
+// estante. Pasa de verdad cuando la jornada de ese sitio ya está cerrada, o
+// cuando se cae el internet entre las dos peticiones.
+async function apuntarExistenciaInicial(productoId, costoBase, cantidad) {
+  if (!(cantidad > 0)) return null;
+  const donde = (SITIOS.find(s => s.id === sitioActual()) || {}).nombre || 'el sitio';
+  try {
+    await api('/api/movimientos', { method: 'POST', body: JSON.stringify({
+      tipo: 'compra',
+      sitio_id: sitioActual(),
+      producto_id: productoId,
+      cantidad,
+      costo_unit: costoBase,
+      obs: 'Existencia con la que se dio de alta el producto',
+      fecha: new Date().toLocaleDateString('sv-SE')
+    }) });
+    return { mal: false, texto: 'Se apuntaron ' + cantidad + ' en ' + donde + '.' };
+  } catch (e) {
+    return { mal: true, texto: 'El producto se creó, pero la existencia NO se pudo apuntar: ' +
+      e.message + ' Apúntala con el botón «Entrada» del almacén.' };
+  }
+}
+
 // Se queda en pantalla hasta que la persona lo cierra: es el momento de coger
 // el marcador y escribirlo en el producto.
-function mostrarCodigoNuevo(codigo, nombre) {
+function mostrarCodigoNuevo(codigo, nombre, aviso) {
   $('nc-codigo').textContent = codigo;
   $('nc-nombre').textContent = nombre;
+  const av = $('nc-aviso');
+  av.style.display = aviso ? 'block' : 'none';
+  if (aviso) {
+    av.textContent = aviso.texto;
+    av.style.color = aviso.mal ? 'var(--rojo)' : 'var(--texto2)';
+    av.style.fontWeight = aviso.mal ? '700' : '400';
+  }
   $('velo-codigo').classList.add('abierto');
 }
 function cerrarCodigoNuevo() { $('velo-codigo').classList.remove('abierto'); }

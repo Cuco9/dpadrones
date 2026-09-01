@@ -999,6 +999,20 @@
     <label class="lbl">Alerta de stock bajo</label>
     <input type="number" id="f-stockmin" placeholder="0" inputmode="decimal">
 
+    <!-- El stock no se guarda en ninguna columna: es la suma de los movimientos
+         (DECISIONES.md #1). Esta casilla NO lo guarda tampoco — pregunta cuánto
+         hay y la aplicación apunta por dentro la ENTRADA, exactamente la misma
+         que haría el botón «Entrada» del almacén. Está aquí porque sin ella la
+         gente crea el producto, se queda mirando la ficha buscando dónde poner lo
+         que tiene delante, y acaba sin apuntarlo.
+         Solo sale al CREAR: en un producto que ya existe, escribir la existencia
+         a mano sería pisar el historial en vez de apuntar lo que pasó (#2). -->
+    <div id="f-existencia-caja" style="display:none">
+      <label class="lbl">¿Cuánto tienes ahora?</label>
+      <input type="number" id="f-existencia" placeholder="0" inputmode="decimal">
+      <div class="pista" id="f-existencia-pista"></div>
+    </div>
+
     <div class="dosCol">
       <div>
         <label class="lbl">Comisión al vendedor</label>
@@ -1114,6 +1128,10 @@
     <div class="codigoGrande" style="font-size:40px;padding:26px 16px" id="nc-codigo">DP-0000</div>
     <div class="pista" style="text-align:center">Escribe este código en el producto o en su
       caja. En la caja lo tecleas y aparece al instante.</div>
+    <!-- Si la existencia inicial no se pudo apuntar, aquí se dice. El producto ya
+         está creado: callarlo dejaría el inventario en cero con la mercancía en
+         el estante, que es la clase de mentira que no caza ninguna prueba. -->
+    <div class="pista" id="nc-aviso" style="text-align:center;display:none"></div>
     <div class="btnFila">
       <button class="btn primario ancho" onclick="cerrarCodigoNuevo()">Ya lo apunté</button>
     </div>

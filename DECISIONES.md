@@ -42,6 +42,24 @@ imposible de hacer bien.
 quién gana. Da igual el orden y da igual cuántas veces se junte: el resultado es
 el mismo.
 
+**Y una trampa de esta regla, vista el 1 de septiembre de 2026:** por fuera se
+notaba como un olvido. Se creaba un producto en el Almacén y no había ninguna
+casilla para decir cuántos hay, porque la existencia solo entraba por el botón
+«Entrada». La regla estaba bien; lo que faltaba era la pregunta. La ficha de un
+producto **nuevo** pregunta ahora «¿Cuánto tienes ahora?» y la aplicación apunta
+por dentro la **entrada** correspondiente al sitio donde se está, que es
+exactamente lo que habría hecho el botón. **La casilla no guarda nada**: no viaja
+dentro del producto ni existe ninguna columna nueva.
+
+En un producto que **ya existe** la casilla no sale, y no es por pereza: escribir
+ahí la existencia sería pisar el historial en vez de apuntar lo que pasó (#2).
+Para eso están Entrada, Merma y el conteo del cierre.
+
+El producto se crea primero y la entrada después, porque hasta que no existe no
+hay a qué apuntarla. Si la entrada falla —la jornada de ese sitio ya cerrada, o
+el internet— **se dice en pantalla**, con el producto ya creado: callarlo dejaría
+el inventario diciendo cero con la mercancía en el estante.
+
 ## 2. Los movimientos son inmutables. Nada se borra ni se edita.
 
 Cada movimiento nace con un identificador único y ya no cambia nunca.

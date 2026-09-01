@@ -271,6 +271,24 @@ comp('el servidor y la aplicación recortan el MISMO prefijo del nombre de la ca
 comp('y ese prefijo es el que la caja lleva de verdad',
   !!recorteServidor && nombreCaja.startsWith(recorteServidor.slice(2, -1)),
   JSON.stringify({ caja: nombreCaja, recorte: recorteServidor }));
+// Y que no quede NINGÚN resto del prefijo viejo en ninguna parte. El del nombre
+// de la caja tardó tres días en aparecer, y detrás venían nueve más escondidos en
+// los nombres de las carpetas de usar y tirar de las pruebas. Ninguno rompía nada;
+// por eso sobrevivieron. Se mira en todo lo escrito a mano, no solo en el front.
+const aMano = [];
+(function mirar(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name === '.git' || e.name === 'salvas') continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) mirar(p);
+    else if (/\.(js|html|css|sql|json)$/.test(e.name) && e.name !== 'package-lock.json') aMano.push(p);
+  }
+})(raiz);
+const conResto = aMano.filter(p => /\bqs[-_]|\bQS_/.test(fs.readFileSync(p, 'utf8')))
+  .map(p => path.relative(raiz, p));
+comp('no queda ningún resto del prefijo de la aplicación de la que salió esta' +
+  (conResto.length ? ': ' + conResto.join(', ') : ''), !conResto.length);
+
 comp('la aplicación compara la suya con la del servidor',
   /function mirarVersiones[\s\S]{0,600}\/api\/salud/.test(js));
 comp('y lo hace al arrancar y cada cierto tiempo, no solo si alguien mira',
@@ -560,6 +578,42 @@ comp('sin permiso también se apunta, para que no salgan veinte de golpe luego',
   /Notification\.permission !== 'granted'[\s\S]{0,220}guardarAnunciados/.test(js));
 comp('la campanita funciona aunque el aviso del teléfono no esté',
   /catch \(e\) \{ \/\* sin service worker no hay aviso/.test(js));
+
+// Al crear un producto no había dónde poner lo que ya se tiene en el estante:
+// la existencia solo entraba por el botón «Entrada». La casilla que se añadió
+// NO puede convertirse en un campo guardado, o se rompe la decisión #1 y vuelve
+// el inventario que desaparece cuando dos aparatos se pisan.
+console.log('\n=== La existencia con la que nace un producto ===');
+comp('la ficha tiene la casilla, y su explicación',
+  /id="f-existencia-caja"/.test(html) && /id="f-existencia"/.test(html) &&
+  /id="f-existencia-pista"/.test(html));
+comp('solo se pregunta al crear, no al editar',
+  /const puedeExistencia = !p && puedo\('gestionar_inventario'\)/.test(js) &&
+  /\$\('f-existencia-caja'\)\.style\.display = puedeExistencia \? 'block' : 'none'/.test(js));
+// Quien solo lleva el catálogo no puede mover mercancía: si viera la casilla,
+// crearía el producto y el servidor le rechazaría la entrada después.
+comp('y solo a quien puede mover mercancía',
+  /puedeExistencia = !p && puedo\('gestionar_inventario'\)/.test(js));
+comp('se apunta como ENTRADA de verdad, en el sitio donde se está',
+  /api\('\/api\/movimientos'[\s\S]{0,200}tipo: 'compra'[\s\S]{0,120}sitio_id: sitioActual\(\)/.test(js));
+// El cuerpo que viaja a /api/productos es el que no puede llevarla: guardarla
+// ahí sería el campo «este punto tiene 47 unidades» que la #1 prohíbe.
+comp('NO viaja dentro del producto: el stock se sigue calculando',
+  !/(existencia|stock)\s*[:,]/.test(js.slice(js.indexOf('const cuerpo = {'),
+                                              js.indexOf("precios: [...document.querySelectorAll('#ficha-precios input')]"))));
+comp('vacío no apunta nada, y cero se devuelve por despiste',
+  /function existenciaEscrita[\s\S]{0,400}if \(txt === ''\) return null/.test(js) &&
+  /existencia !== null && !\(existencia > 0\)/.test(js));
+// El producto se crea primero y la entrada después: si la segunda falla —la
+// jornada cerrada, o el internet— el producto YA existe. Callarlo dejaría el
+// inventario diciendo cero con la mercancía en el estante.
+comp('si la entrada falla se dice, con el producto ya creado',
+  /catch \(e\) \{[\s\S]{0,200}mal: true[\s\S]{0,200}NO se pudo apuntar/.test(js) &&
+  /id="nc-aviso"/.test(html) &&
+  /av\.style\.color = aviso\.mal \? 'var\(--rojo\)'/.test(js));
+comp('y la cantidad se mira ANTES de crear nada',
+  js.indexOf('const existencia = existenciaEscrita()') <
+  js.indexOf("await api('/api/productos', { method: 'POST'"));
 
 console.log('\n' + (mal ? 'FALLAN ' + mal + ' de ' + (ok + mal) : 'TODO BIEN: ' + ok + ' comprobaciones'));
 process.exit(mal ? 1 : 0);
