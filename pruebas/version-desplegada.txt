@@ -1,4 +1,4 @@
-32d610c
+b11b36f
 # Lo que corre en el VPS ahora mismo (1-sep-2026).
 #
 # Solo se lee la PRIMERA línea, y tiene que ser un commit que exista en git.
