@@ -266,6 +266,12 @@ input:focus,select:focus,textarea:focus{
 .prod .pre b{font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .prod .pre span{display:block;font-size:11px;color:var(--texto3);margin-top:2px}
 .vacio{text-align:center;padding:32px 16px;color:var(--texto3);font-size:14px;line-height:1.6}
+/* El boton que sale cuando el filtro «Con existencia» deja la lista vacia.
+   Fuera de una venta, .acc no tiene estilo ninguno y salia como un boton gris
+   del navegador en mitad del texto. */
+.vacio .acc{background:none;border:0;color:var(--acento);font-size:14px;
+  font-weight:700;cursor:pointer;padding:0;font-family:inherit;
+  text-decoration:underline;text-underline-offset:3px}
 
 /* ─── Modales ─── */
 .velo{position:fixed;inset:0;background:rgba(28,9,13,.55);backdrop-filter:blur(3px);

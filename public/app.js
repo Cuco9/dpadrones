@@ -1850,6 +1850,28 @@ let almacenPintadoDe = null;      // de qué sitio se pintó la última vez
 
 async function cargarAlmacen() {
   pintarSelectorSitio();
+
+  // CON UN SOLO SITIO, la vista de «todo el negocio» no suma nada: enseña
+  // exactamente lo mismo que «solo lo que hay aquí». Y a cambio esconde los
+  // botones de Entrada, Merma y Despachar, porque una entrada tiene que ir a un
+  // sitio concreto y no «a todos».
+  //
+  // El resultado era una pantalla de Almacén SIN NINGUNA FORMA DE METER
+  // MERCANCÍA, y así se encontró el dueño la aplicación el 1-sep-2026: entraba,
+  // veía «Todo el negocio, sumado», ni un botón, y una lista vacía. No estaba
+  // rompiendo nada ninguna regla; era una vista pensada para varios almacenes
+  // puesta delante de un negocio que de momento tiene uno.
+  //
+  // Así que con un solo sitio el desplegable no se enseña, y vuelve solo el día
+  // que se cree un punto de venta. Nada que configurar.
+  const variosSitios = SITIOS.filter(s => s.activo !== 0).length > 1;
+  $('alm-alcance-caja').style.display = variosSitios ? '' : 'none';
+  // Despachar es mandar mercancía a OTRO sitio: sin otro sitio no hay destino.
+  // Se mira también el permiso, porque este renglón pisa lo que dejó puesto
+  // aplicarPermisos() al entrar.
+  $('btn-despachar').style.display =
+    (variosSitios && puedo('traslados_enviar')) ? '' : 'none';
+
   // Al entrar en el almacén principal se enseña TODO el negocio: quien está
   // allí lleva las cuentas de todo y lo primero que quiere saber es qué hay
   // entre todos los sitios. En un punto se enseña solo lo de ese punto, que es
@@ -1857,8 +1879,12 @@ async function cargarAlmacen() {
   // recarga, desharía lo que la persona acabe de elegir en el desplegable.
   if (almacenPintadoDe !== sitioActual()) {
     almacenPintadoDe = sitioActual();
-    $('alm-alcance').value = enElMirador() ? 'todos' : 'sitio';
+    $('alm-alcance').value = (variosSitios && enElMirador()) ? 'todos' : 'sitio';
   }
+  // Y si el desplegable no está a la vista, su valor no puede quedarse en
+  // «todos» de una temporada en que sí había dos sitios: lo escondido no se
+  // puede corregir a mano.
+  if (!variosSitios) $('alm-alcance').value = 'sitio';
   await cargarStock();
   await cargarStockTotal();
   try {
@@ -1890,6 +1916,9 @@ function renderAlmacen() {
     (p.nombre || '').toLowerCase().includes(q) ||
     (p.codigo || '').toLowerCase().includes(q) ||
     (p.codigo_barra || '').toLowerCase().includes(q));
+  // Cuántos quedan ANTES de filtrar por existencia. Es lo que permite distinguir
+  // «no hay productos» de «los hay, pero ninguno tiene mercancía todavía».
+  const antesDeExistencia = lista.length;
 
   const hay = p => Number((todos ? STOCK_TOTAL : STOCK)[p.id] || 0);
   if (filtro === 'con') lista = lista.filter(p => hay(p) > 0);
@@ -1925,8 +1954,28 @@ function renderAlmacen() {
         : pillStock(p.id) + '<span>' + enBase(n > 0 ? n * (p.costo || 0) : 0) + '</span>'}</div>
       <span class="accIco editar" title="Tocar para editar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></span>
     </div>`;
-  }).join('') : '<div class="vacio">Nada que mostrar con este filtro.</div>';
+  }).join('') : almacenVacio(filtro, antesDeExistencia, !!(q || cat));
 }
+
+// Por qué está vacía la lista. «Nada que mostrar con este filtro» no ayuda: no
+// dice si es que no hay productos o que el filtro los tapa, y el almacén abre
+// filtrando por «Con existencia». Un catálogo recién creado, sin entradas
+// todavía, sale entero vacío y parece que la aplicación no ha guardado nada.
+// Le pasó al dueño el 1-sep-2026, el mismo día y en la misma pantalla que lo de
+// los botones escondidos.
+function almacenVacio(filtro, antesDeExistencia, buscando) {
+  if (!antesDeExistencia) return '<div class="vacio">' + (buscando
+    ? 'Nada coincide con lo que buscas.'
+    : 'Todavía no hay ningún producto en el catálogo.<br>' +
+      'Créalo con el botón «Nuevo producto» de aquí abajo.') + '</div>';
+  if (filtro === 'con') return '<div class="vacio">Ninguno tiene existencia todavía.<br>' +
+    'Tienes ' + antesDeExistencia + (antesDeExistencia === 1 ? ' producto' : ' productos') +
+    ' en el catálogo · <button class="acc" onclick="verTodoElCatalogo()">Verlos todos</button>' +
+    (puedo('gestionar_inventario')
+      ? '<br>Para meter mercancía, el botón «Entrada» de arriba.' : '') + '</div>';
+  return '<div class="vacio">Nada que mostrar con este filtro.</div>';
+}
+function verTodoElCatalogo() { $('alm-filtro').value = 'todos'; renderAlmacen(); }
 
 // ─── Traslados en tránsito ────────────────────────────────────
 function renderTransitos() {

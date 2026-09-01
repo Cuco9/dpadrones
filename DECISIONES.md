@@ -433,9 +433,35 @@ responde quien atiende. Lo eligió el dueño el 13 de agosto de 2026.
 está. Una pantalla más que aprender es una pantalla más que nadie abre.
 
 **Cuál es el almacén principal se decide en un solo sitio**: el primer almacén
-que se creó. Aquí hay tres (Principal, Iglesia y Brigada) y el servidor ya usaba
-esa regla para meter la mercancía que una inversión no reparte. Si la pantalla
-eligiera otro, la mercancía entraría en un almacén y se enseñaría en otro.
+que se creó. El servidor ya usaba esa regla para meter la mercancía que una
+inversión no reparte. Si la pantalla eligiera otro, la mercancía entraría en un
+almacén y se enseñaría en otro.
+
+**Y el mirador se apaga cuando no hay nada que mirar. Vivido el 1 de septiembre
+de 2026.** Este negocio tiene, de momento, **un solo sitio**. Con uno solo, «todo
+el negocio sumado» enseña exactamente lo mismo que «lo que hay aquí» —no suma
+nada— y a cambio **esconde los botones de Entrada, Merma y Despachar**, porque
+una entrada tiene que ir a un sitio concreto y no «a todos». El resultado era una
+pantalla de Almacén **sin ninguna forma de meter mercancía**: el dueño entraba,
+veía «Todo el negocio, sumado», ni un botón, y una lista vacía. Preguntó dónde
+estaba la opción de entradas, y la respuesta honrada era que no estaba.
+
+Así que **con un solo sitio el desplegable de alcance no se enseña** y el Almacén
+se queda siempre en «lo que hay aquí»; **Despachar se esconde** mientras no haya
+otro sitio al que mandar. Vuelven los dos, solos, el día que se cree un punto de
+venta. Nada que configurar, y la regla de arriba intacta.
+
+**La otra mitad del mismo susto:** el Almacén abre filtrando por «Con
+existencia», así que un catálogo recién creado —productos sin entradas todavía—
+salía entero vacío bajo un «Nada que mostrar con este filtro» que se lee como
+«no se guardó». Ahora la lista vacía dice **cuál de las dos cosas es**: si no hay
+productos, o si los hay y ninguno tiene mercancía; y en ese caso ofrece verlos
+todos y recuerda que la mercancía entra por el botón «Entrada».
+
+**Lección, que no es sobre almacenes:** una vista pensada para el negocio grande,
+puesta delante del negocio pequeño, no da error — **quita opciones en silencio**.
+Al recortar esta aplicación se miró qué pantallas sobraban; no se miró qué
+pantallas se quedaban a medias con un solo sitio.
 
 **Lo que pasó y lo que hay son dos tablas distintas, nunca una.**
 

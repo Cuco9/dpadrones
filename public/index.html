@@ -273,7 +273,7 @@
     <div class="btnFila" id="alm-acciones" style="margin-top:0;margin-bottom:12px">
       <button class="btn primario" style="flex:1" data-permiso="gestionar_inventario" onclick="abrirMov('compra')">Entrada</button>
       <button class="btn" style="flex:1" data-permiso="gestionar_inventario" onclick="abrirMov('merma')">Merma</button>
-      <button class="btn acento" style="flex:1" data-permiso="traslados_enviar" onclick="abrirDespacho()">Despachar</button>
+      <button class="btn acento" style="flex:1" id="btn-despachar" data-permiso="traslados_enviar" onclick="abrirDespacho()">Despachar</button>
     </div>
 
     <div id="transitos"></div>
@@ -293,8 +293,10 @@
     </div>
     <!-- Dos preguntas distintas: «qué hay en este estante» y «cuánto tengo de
          esto en total, esté donde esté». Las dos hacen falta, y por eso no se
-         mezclan en un solo número. -->
-    <div class="filtros">
+         mezclan en un solo número.
+         Con UN SOLO sitio no son dos preguntas, son la misma, y este desplegable
+         desaparece entero. Ver por qué en cargarAlmacen(). -->
+    <div class="filtros" id="alm-alcance-caja">
       <select id="alm-alcance" onchange="cambiarAlcanceAlmacen()">
         <option value="sitio">Solo lo que hay aquí</option>
         <option value="todos">Todo el negocio, sumado</option>

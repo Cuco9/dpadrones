@@ -181,8 +181,51 @@ comp('y solo se pinta estando en el almacén principal',
   /if \(enElMirador\(\)\)[\s\S]{0,300}dia-negocio/.test(js));
 comp('cuál es el almacén principal se decide como en el servidor: el primero que se creó',
   /function sitioPrincipal|const sitioPrincipal/.test(js) && /creado_en/.test(js));
-comp('al entrar en el almacén principal, el inventario sale sumado',
-  /almacenPintadoDe[\s\S]{0,300}alm-alcance'\)\.value = enElMirador\(\) \? 'todos' : 'sitio'/.test(js));
+comp('al entrar en el almacén principal, el inventario sale sumado…',
+  /almacenPintadoDe[\s\S]{0,300}alm-alcance'\)\.value = \(variosSitios && enElMirador\(\)\) \? 'todos' : 'sitio'/.test(js));
+
+// …pero SOLO si hay más de un sitio. Con uno solo, «todo el negocio» enseña
+// exactamente lo mismo que «lo que hay aquí» y a cambio esconde los botones de
+// Entrada y Merma, porque una entrada tiene que ir a un sitio concreto. Eso
+// dejaba la pantalla de Almacén sin ninguna forma de meter mercancía, que es
+// como el dueño se encontró la aplicación el 1-sep-2026: entraba, veía «Todo el
+// negocio, sumado», ni un botón, y una lista vacía.
+comp('con un solo sitio, el desplegable de alcance no se enseña',
+  /const variosSitios = SITIOS\.filter\(s => s\.activo !== 0\)\.length > 1/.test(js) &&
+  /\$\('alm-alcance-caja'\)\.style\.display = variosSitios \? '' : 'none'/.test(js) &&
+  /id="alm-alcance-caja"/.test(html));
+comp('y entonces el alcance se queda en «lo que hay aquí», pase lo que pase',
+  /if \(!variosSitios\) \$\('alm-alcance'\)\.value = 'sitio'/.test(js));
+// Que es lo que hace aparecer los botones: cambiarAlcanceAlmacen esconde la fila
+// entera en la vista de todo el negocio.
+comp('los botones de Entrada y Merma cuelgan del alcance, no del permiso a secas',
+  /\$\('alm-acciones'\)\.style\.display = todos \? 'none' : 'flex'/.test(js));
+comp('despachar se esconde cuando no hay otro sitio al que mandar',
+  /\$\('btn-despachar'\)\.style\.display =[\s\S]{0,120}variosSitios && puedo\('traslados_enviar'\)/.test(js) &&
+  /id="btn-despachar"/.test(html));
+
+// Y cuando la lista sale vacía, decir cuál de las dos cosas es. El almacén abre
+// filtrando por «Con existencia», así que un catálogo recién creado —sin
+// entradas todavía— salía entero vacío con un «Nada que mostrar con este
+// filtro» que parecía que la aplicación no había guardado el producto.
+comp('la lista vacía dice si es que no hay productos o que ninguno tiene existencia',
+  /function almacenVacio\(filtro, antesDeExistencia, buscando\)/.test(js) &&
+  // Y que la lista la LLAME: una función que nadie usa deja el aviso mudo igual.
+  /\.join\(''\) : almacenVacio\(filtro, antesDeExistencia/.test(js) &&
+  /Ninguno tiene existencia todavía/.test(js) &&
+  /Todavía no hay ningún producto en el catálogo/.test(js));
+comp('y ofrece verlos todos sin ir a buscar el filtro',
+  /function verTodoElCatalogo\(\) \{ \$\('alm-filtro'\)\.value = 'todos'; renderAlmacen\(\); \}/.test(js));
+// Solo dentro de renderAlmacen: en la Caja hay otro `filtro === 'con'` antes, y
+// comparando sobre todo el archivo se comparaban dos trozos que no se hablan.
+const cuerpoAlmacen = js.slice(js.indexOf('function renderAlmacen()'),
+                              js.indexOf('function renderTransitos()'));
+comp('el recuento se toma ANTES de filtrar por existencia, o siempre diría cero',
+  cuerpoAlmacen.indexOf('const antesDeExistencia = lista.length;') > -1 &&
+  cuerpoAlmacen.indexOf('const antesDeExistencia = lista.length;') <
+  cuerpoAlmacen.indexOf("if (filtro === 'con') lista = lista.filter"));
+comp('y buscar sin coincidencias no se confunde con un catálogo vacío',
+  /Nada coincide con lo que buscas/.test(js));
 // Lo que pasó en un período y lo que hay hoy son dos cosas distintas: si se
 // mezclan en una sola tabla, alguien leerá «tiene» donde pone «vendió».
 comp('el desglose separa lo del período de lo que hay ahora',
