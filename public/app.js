@@ -146,6 +146,62 @@ function irA(pantalla, btn) {
   if (pantalla === 'caja') { renderResultados(); setTimeout(() => $('caja-busq').focus(), 80); }
 }
 
+// ─── La tecla «atrás» del teléfono ────────────────────────────
+// Sin esto, UN solo toque en «atrás» cierra la aplicación de golpe: instalada en
+// el teléfono no hay página anterior a la que volver, así que el sistema la
+// saca. Y pasa a mitad de una venta, con el carro a medias.
+//
+// El truco es tener SIEMPRE una entrada de historia de sobra puesta. Cuando
+// «atrás» se la come, el sistema no saca a nadie —había a dónde volver—, aquí
+// se decide qué hacer y se vuelve a poner la entrada.
+//
+//   1. Si hay una ventana abierta, «atrás» cierra esa ventana y nada más.
+//   2. Si no hay ninguna, el primer toque avisa y solo el segundo, dentro de
+//      dos segundos, sale de verdad.
+let atrasArmado = 0;
+function ponerRedDeAtras() {
+  try { history.pushState({ dp: 1 }, ''); } catch (e) {}
+}
+
+// La ventana de encima. Todos los velos comparten z-index, así que la que pinta
+// encima es la ÚLTIMA del HTML, no la última que se abrió; y son la misma cosa
+// mientras las ventanas se declaren en el orden en que se apilan.
+function ventanaDeEncima() {
+  const abiertas = document.querySelectorAll('.velo.abierto');
+  return abiertas.length ? abiertas[abiertas.length - 1] : null;
+}
+
+// Se cierra LLAMANDO A SU FUNCIÓN, nunca quitándole la clase a mano: el escáner
+// tiene que apagar la cámara —si no, se queda encendida y comiéndose la
+// batería—, y la ficha, el fondo o la inversión tienen que soltar lo que
+// estaban editando. Quitar la clase esconde la ventana y deja el trabajo a
+// medias por dentro.
+//
+// El nombre de esa función se lee del propio HTML: cada velo ya lo lleva en su
+// onclick, para cerrarse al tocar fuera. Así una ventana nueva funciona sola,
+// sin que nadie tenga que acordarse de apuntarla en ninguna lista de aquí.
+function cerrarVentana(velo) {
+  const nombre = (String(velo.getAttribute('onclick') || '')
+    .match(/(cerrar[A-Za-z]+)\(\)/) || [])[1];
+  if (nombre && typeof window[nombre] === 'function') { window[nombre](); return; }
+  velo.classList.remove('abierto');
+}
+
+window.addEventListener('popstate', () => {
+  const velo = ventanaDeEncima();
+  if (velo) { cerrarVentana(velo); ponerRedDeAtras(); return; }
+  if (Date.now() - atrasArmado < 2000) {
+    // Segundo toque: se sale de verdad. NO se vuelve a poner la red, y se pide
+    // ir atrás otra vez, que es lo que cierra la aplicación instalada.
+    setTimeout(() => { try { history.back(); } catch (e) {} }, 0);
+    return;
+  }
+  atrasArmado = Date.now();
+  toast('Toca «atrás» otra vez para salir');
+  ponerRedDeAtras();
+});
+ponerRedDeAtras();
+
 // ─── Lo que se carga al arrancar ──────────────────────────────
 // El catálogo entero, los sitios y las existencias. Ya no hay pantalla de
 // productos: el catálogo se ve y se edita desde el Almacén, que es donde de
@@ -1872,14 +1928,21 @@ async function cargarAlmacen() {
   $('btn-despachar').style.display =
     (variosSitios && puedo('traslados_enviar')) ? '' : 'none';
 
-  // Al entrar en el almacén principal se enseña TODO el negocio: quien está
-  // allí lleva las cuentas de todo y lo primero que quiere saber es qué hay
-  // entre todos los sitios. En un punto se enseña solo lo de ese punto, que es
-  // de lo que responde. Solo se toca al CAMBIAR de sitio: si se hiciera en cada
-  // recarga, desharía lo que la persona acabe de elegir en el desplegable.
+  // El Almacén abre SIEMPRE en «solo lo que hay aquí», también en el almacén
+  // principal. Lo pidió el dueño el 1-sep-2026: lo primero que quiere ver al
+  // entrar es su estante, no una suma. La vista de todo el negocio sigue
+  // estando, a un toque del desplegable, cuando haya más de un sitio.
+  //
+  // Antes abría en «todo el negocio» estando en el principal, por la decisión
+  // #22 —el almacén principal es el mirador—. Eso se queda para Cierre y Dinero,
+  // que es donde de verdad se llevan las cuentas de todo; en el Almacén, la
+  // pantalla de la que se sale a mover mercancía, mandaba el estante.
+  //
+  // Solo se toca al CAMBIAR de sitio: si se hiciera en cada recarga, desharía lo
+  // que la persona acabe de elegir en el desplegable.
   if (almacenPintadoDe !== sitioActual()) {
     almacenPintadoDe = sitioActual();
-    $('alm-alcance').value = (variosSitios && enElMirador()) ? 'todos' : 'sitio';
+    $('alm-alcance').value = 'sitio';
   }
   // Y si el desplegable no está a la vista, su valor no puede quedarse en
   // «todos» de una temporada en que sí había dos sitios: lo escondido no se

@@ -284,9 +284,13 @@
     </div>
     <div class="filtros">
       <select id="alm-cat"><option value="">Todas las categorías</option></select>
+      <!-- «Todo el catálogo» va PRIMERO porque el primer <option> es el que sale
+           puesto, y el dueño lo pidió así el 1-sep-2026: quiere ver el catálogo
+           entero al entrar, tenga mercancía o no. Filtrando por existencia, un
+           producto recién creado no aparece y parece que no se guardó. -->
       <select id="alm-filtro">
-        <option value="con">Con existencia</option>
         <option value="todos">Todo el catálogo</option>
+        <option value="con">Con existencia</option>
         <option value="bajo">Stock bajo o agotado</option>
         <option value="negativo">En negativo</option>
       </select>

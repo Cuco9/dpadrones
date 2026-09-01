@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "probar": "node pruebas/pantallas.js && node pruebas/certificados.js && node pruebas/inversiones.js && node pruebas/monedas.js && node pruebas/correcciones.js && node pruebas/comisiones.js && node pruebas/mermas.js && node pruebas/permisos.js && node pruebas/desglose.js && node pruebas/actualizar.js"
+    "probar": "node pruebas/pantallas.js && node pruebas/certificados.js && node pruebas/inversiones.js && node pruebas/monedas.js && node pruebas/correcciones.js && node pruebas/comisiones.js && node pruebas/mermas.js && node pruebas/permisos.js && node pruebas/desglose.js && node pruebas/atras.js && node pruebas/actualizar.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

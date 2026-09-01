@@ -181,15 +181,25 @@ comp('y solo se pinta estando en el almacén principal',
   /if \(enElMirador\(\)\)[\s\S]{0,300}dia-negocio/.test(js));
 comp('cuál es el almacén principal se decide como en el servidor: el primero que se creó',
   /function sitioPrincipal|const sitioPrincipal/.test(js) && /creado_en/.test(js));
-comp('al entrar en el almacén principal, el inventario sale sumado…',
-  /almacenPintadoDe[\s\S]{0,300}alm-alcance'\)\.value = \(variosSitios && enElMirador\(\)\) \? 'todos' : 'sitio'/.test(js));
+// El ALMACÉN abre siempre en «solo lo que hay aquí», también en el almacén
+// principal: lo pidió el dueño el 1-sep-2026, porque lo primero que quiere ver
+// al entrar es su estante y no una suma. El mirador de la #22 se queda para
+// Cierre y Dinero, que es donde se llevan las cuentas de todo.
+comp('el almacén abre en «lo que hay aquí», también en el principal',
+  /almacenPintadoDe[\s\S]{0,400}\$\('alm-alcance'\)\.value = 'sitio';/.test(js) &&
+  !/alm-alcance'\)\.value = .{0,40}enElMirador/.test(js));
+// Y el filtro abre en «Todo el catálogo»: el primer <option> es el que sale
+// puesto. Filtrando por existencia, un producto recién creado no aparece y
+// parece que no se guardó — que es justo lo que le pasó al dueño ese día.
+comp('y el filtro abre en «Todo el catálogo», que va el primero',
+  /<select id="alm-filtro">\s*(<!--[\s\S]*?-->\s*)?<option value="todos">/.test(html));
 
-// …pero SOLO si hay más de un sitio. Con uno solo, «todo el negocio» enseña
-// exactamente lo mismo que «lo que hay aquí» y a cambio esconde los botones de
-// Entrada y Merma, porque una entrada tiene que ir a un sitio concreto. Eso
-// dejaba la pantalla de Almacén sin ninguna forma de meter mercancía, que es
-// como el dueño se encontró la aplicación el 1-sep-2026: entraba, veía «Todo el
-// negocio, sumado», ni un botón, y una lista vacía.
+// Con un solo sitio, «todo el negocio» enseña exactamente lo mismo que «lo que
+// hay aquí» y a cambio esconde los botones de Entrada y Merma, porque una
+// entrada tiene que ir a un sitio concreto. Eso dejaba la pantalla de Almacén
+// sin ninguna forma de meter mercancía, que es como el dueño se encontró la
+// aplicación el 1-sep-2026: entraba, veía «Todo el negocio, sumado», ni un
+// botón, y una lista vacía.
 comp('con un solo sitio, el desplegable de alcance no se enseña',
   /const variosSitios = SITIOS\.filter\(s => s\.activo !== 0\)\.length > 1/.test(js) &&
   /\$\('alm-alcance-caja'\)\.style\.display = variosSitios \? '' : 'none'/.test(js) &&

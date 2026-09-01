@@ -437,6 +437,14 @@ que se creó. El servidor ya usaba esa regla para meter la mercancía que una
 inversión no reparte. Si la pantalla eligiera otro, la mercancía entraría en un
 almacén y se enseñaría en otro.
 
+**Y en el Almacén, el mirador ya no manda ni con varios sitios.** El mismo día, y
+después de ver lo de arriba, el dueño lo pidió claro: el Almacén tiene que abrir en
+**«solo lo que hay aquí»** y en **«todo el catálogo»**. Lo primero que quiere ver al
+entrar es su estante, no una suma; y filtrando por existencia, un producto recién
+creado no aparece y parece que no se guardó. La vista de todo el negocio sigue
+estando a un toque del desplegable cuando haya más de un sitio. **La #22 se queda
+entera para Cierre y Dinero**, que es donde de verdad se llevan las cuentas de todo.
+
 **Y el mirador se apaga cuando no hay nada que mirar. Vivido el 1 de septiembre
 de 2026.** Este negocio tiene, de momento, **un solo sitio**. Con uno solo, «todo
 el negocio sumado» enseña exactamente lo mismo que «lo que hay aquí» —no suma
