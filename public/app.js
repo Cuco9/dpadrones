@@ -219,7 +219,11 @@ async function cargarCatalogo() {
     SITIOS = d.sitios || [];
     rellenarCategorias();
     pintarSelectorSitio();
-    await cargarClientes();
+    // Los clientes NO se esperan aquí: solo hacen falta al cobrar, y al entrar
+    // ponían un viaje más en la fila. Las existencias tampoco: quien llama a esto
+    // al arrancar las pide a la vez, y quien lo llama después de cambiar algo las
+    // vuelve a pedir por su cuenta.
+    cargarClientes();
     await cargarStock();
     renderCarro();
     // La rejilla de la caja se dibuja AQUI. Antes solo se rehacia al escribir en
@@ -4301,8 +4305,27 @@ const CAMPOS_MARCA = {
 
 // Se pide SIN sesión, porque la pantalla de entrar necesita el logo y el
 // nombre antes de que nadie haya entrado.
+// EL NOMBRE Y EL LOGO SE PINTAN DE MEMORIA (DECISIONES.md #45). Son lo primero
+// que se ve, no cambian casi nunca, y esperar a que el servidor los mande dejaba
+// la pantalla de entrar en blanco todo un viaje de ida y vuelta —que por el
+// internet de un teléfono es medio segundo largo, y a veces mucho más—.
+//
+// Se guardan en el dispositivo la primera vez y a partir de ahí se pintan al
+// instante; el servidor se pregunta igual, pero POR DETRÁS y sin que nadie
+// espere. Si contesta algo distinto, se repinta.
+function marcaGuardada() {
+  try {
+    const t = localStorage.getItem('dp_marca');
+    if (t) MARCA = Object.assign(MARCA, JSON.parse(t));
+  } catch (e) { /* si está rota, se pinta la de fábrica y se pide de nuevo */ }
+  pintarMarca();
+}
+
 async function cargarMarca() {
-  try { MARCA = Object.assign(MARCA, await api('/api/marca')); } catch (e) {}
+  try {
+    MARCA = Object.assign(MARCA, await api('/api/marca'));
+    try { localStorage.setItem('dp_marca', JSON.stringify(MARCA)); } catch (e) {}
+  } catch (e) {}
   pintarMarca();
 }
 
@@ -4449,29 +4472,43 @@ async function generarClave() {
 let CARGOS = [], PERSONAS = [];
 let cargoEditando = null, personaEditando = null;
 
+// ARRANCAR SIN HACER COLA. Esto eran cinco viajes al servidor uno detrás de otro
+// —marca, estado, yo, y luego el resto—, y cada uno esperando a que contestara el
+// anterior. Por el internet de un teléfono eso es la diferencia entre abrir la
+// aplicación y esperar mirándola.
+//
+// Ahora la marca se pinta de memoria, y los dos que hacen falta salen A LA VEZ:
+// no dependen uno del otro. El de «estado» solo importa para dos cosas —saber si
+// todavía no hay administrador y traer el catálogo de permisos—, así que su
+// respuesta se recoge cuando llegue y nadie la espera para entrar.
 async function arrancar() {
-  await cargarMarca();
+  marcaGuardada();
   const rec = localStorage.getItem('dp_usuario');
   if (rec) { $('in-usuario').value = rec; $('in-recordar').checked = true; }
-  try {
-    const e = await api('/api/auth/estado');
-    PERMISOS_POSIBLES = e.permisos_posibles || [];
-    if (!e.hay_admin) {
-      $('form-entrar').style.display = 'none';
-      $('form-admin').style.display = 'block';
-      document.body.classList.add('entrando');
-      return;
-    }
-  } catch (err) {
-    // Decirlo YA, y no cuando la persona haya escrito su PIN tres veces
-    $('in-error').textContent = err.message;
-  }
 
+  const marca = cargarMarca();
+  const estado = api('/api/auth/estado').then(e => {
+    PERMISOS_POSIBLES = e.permisos_posibles || [];
+    return e;
+  }).catch(err => { $('in-error').textContent = err.message; return null; });
+
+  // Con sesión guardada se va derecho a entrar, sin esperar a «estado»: quien ya
+  // entró alguna vez en este dispositivo no necesita que le pregunten si hay
+  // administrador.
   if (token()) {
     try {
       YO = await api('/api/auth/yo');
       return entrarEnLaApp();
     } catch (e) { localStorage.removeItem('dp_token'); }
+  }
+
+  // Sin sesión, aquí sí hace falta saberlo: la primera vez de todas, en vez de
+  // pedir usuario y PIN, se crea el administrador.
+  const e = await estado;
+  await marca;
+  if (e && !e.hay_admin) {
+    $('form-entrar').style.display = 'none';
+    $('form-admin').style.display = 'block';
   }
   document.body.classList.add('entrando');
 }
@@ -4589,17 +4626,27 @@ async function entrarEnLaApp() {
   else if (YO.persona.sitio_id && !localStorage.getItem('dp_sitio'))
     localStorage.setItem('dp_sitio', YO.persona.sitio_id);
   SITIO = localStorage.getItem('dp_sitio') || '';
-  // Las dos a la vez: no dependen una de otra, y en serie eran dos viajes seguidos
-  // esperando a que contestara el anterior. Por el internet de un teléfono cada
-  // viaje es medio segundo, y esto es lo primero que pasa al abrir la aplicación.
-  // El catálogo va DESPUÉS y sí tiene que esperar: necesita saber en qué moneda se
-  // mide el negocio para pintar los precios.
-  await Promise.all([cargarTasa(), cargarDenominaciones()]);
-  if ($('caja-moneda')) $('caja-moneda').value = MONEDA;
+  // TODO LO QUE NO DEPENDE DE NADA, A LA VEZ. Esto era una fila de viajes al
+  // servidor esperando cada uno al anterior —tasa, billetes, catálogo, existencias,
+  // clientes, avisos—, y por el internet de un teléfono cada viaje es medio segundo
+  // largo. En fila son seis; a la vez es uno.
+  //
+  // El catálogo es el único que espera a la tasa, y por un motivo: necesita saber
+  // en qué moneda se mide el negocio para pintar los precios. Lo demás no espera a
+  // nadie, y los avisos y los clientes ni siquiera se esperan aquí: llegan cuando
+  // lleguen y se repintan solos.
+  const conTasa = Promise.all([cargarTasa(), cargarDenominaciones()])
+    .then(() => {
+      if ($('caja-moneda')) $('caja-moneda').value = MONEDA;
+      return cargarCatalogo();
+    });
+  const existencias = cargarStock();
+  cargarClientes();          // solo hace falta al cobrar; no se espera
+  cargarAvisos();            // la campanita se pinta sola cuando conteste
   recuperarCarro();
-  await cargarCatalogo();
+  await Promise.all([conTasa, existencias]);
+  renderCarro();
   aplicarPermisos();
-  cargarAvisos();
   // Se vuelve a mirar cada pocos minutos, y solo con la pantalla encendida: un
   // teléfono guardado en el bolsillo no tiene por qué estar preguntando.
   setInterval(() => { if (!document.hidden) cargarAvisos(); }, CADA_AVISOS);
