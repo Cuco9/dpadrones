@@ -87,9 +87,14 @@ async function api(ruta, opciones) {
   } catch (e) {
     // Sin servidor, el navegador solo dice "Failed to fetch". Eso se lee como
     // "mi contraseña está mal" y manda a la persona a buscar donde no es.
-    throw new Error('No hay conexión con el servidor.\n\n' +
-      'Comprueba que está arrancado: abre la consola en la carpeta del proyecto ' +
-      'y escribe  npm start');
+    // LO QUE SE LE DICE A LA PERSONA, no lo que le pasa al programa. Aquí ponía
+    // cómo arrancar el servidor desde una consola, y eso lo veía el cliente en su
+    // teléfono: además de no servirle de nada —en un teléfono no hay consola—,
+    // enseña por dentro un trabajo que se le entrega terminado.
+    //
+    // El mensaje dice qué pasa y qué hacer, en el idioma de quien lo lee.
+    throw new Error('Sin conexión.\n\n' +
+      'Comprueba que el teléfono tiene datos o wifi y vuelve a intentarlo.');
   }
   const cuerpo = await r.json().catch(() => ({}));
   if (r.status === 401 && YO) { cerrarSesionLocal(); throw new Error('La sesión se cerró'); }
@@ -242,6 +247,11 @@ function pistaDelBulto() {
   const por = parseFloat($('f-porcaja').value) || 0;
   const nombre = ($('f-nombrecaja').value.trim() || 'caja').toLowerCase();
   const um = ($('f-um').value.trim() || 'unidad').toLowerCase();
+  // El rótulo del número dice la unidad: «Y trae dentro … Libras». Así no hay
+  // que adivinar en qué se escribe esa cifra, que es lo que preguntó el dueño
+  // —«al elegir saco no veo dónde poner que es libras o kilos»—.
+  if ($('f-porcaja-lbl')) $('f-porcaja-lbl').textContent =
+    'Y trae dentro (' + enPlural(um) + ')';
   // «Cada caja» y no «un caja» / «una caja»: así no hay que acertar el género de
   // una palabra que escribe el dueño y que puede ser cualquiera.
   caja.innerHTML = por > 0
@@ -1198,7 +1208,8 @@ function abrirCobro() {
   $('cobro-total').textContent = dinero(totalCarro(), MONEDA);
   const uds = CARRO.reduce((s, l) => s + l.cantidad, 0);
   $('cobro-detalle').textContent =
-    CARRO.length + (CARRO.length === 1 ? ' producto' : ' productos') + ', ' + uds + ' unidades';
+    CARRO.length + (CARRO.length === 1 ? ' producto' : ' productos') + ', ' +
+    uds + (uds === 1 ? ' unidad' : ' unidades');
   pintarSelectorClientes();
   $('cobro-cliente').value = '';
   $('cobro-entrega').value = '';

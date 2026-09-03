@@ -971,11 +971,13 @@
 
     <div class="dosCol">
       <div>
-        <label class="lbl">Unidad de medida</label>
-        <input type="text" id="f-um" placeholder="Unidad" list="lista-um">
+        <label class="lbl">Se cuenta y se vende por…</label>
+        <input type="text" id="f-um" placeholder="Unidad" list="lista-um"
+               oninput="pistaDelBulto()">
         <datalist id="lista-um">
-          <option>Unidad</option><option>Metro</option><option>Rollo</option>
-          <option>Caja</option><option>Juego</option><option>Kilogramo</option>
+          <option>Unidad</option><option>Libra</option><option>Kilogramo</option>
+          <option>Metro</option><option>Litro</option><option>Galón</option>
+          <option>Rollo</option><option>Juego</option><option>Par</option>
         </datalist>
       </div>
       <div>
@@ -994,20 +996,26 @@
          las tiendas por unidades, y es el mismo producto: por dentro todo son
          unidades siempre. Esto solo dice cuántas trae un bulto, para poder
          escribir «3 cajas» al despachar y para poder leer «240 (10 cajas)». -->
+    <div class="pista" id="f-um-pista" style="margin-top:-4px">La existencia se cuenta en esto,
+      y el precio de venta es el de <b>una</b> de estas. Si el saco de arroz lo vendes por
+      libras, escribe <b>Libra</b>.</div>
+
+    <label class="lbl">¿Viene en cajas, sacos o paquetes?</label>
     <div class="dosCol">
       <div>
-        <label class="lbl">Una caja o saco trae</label>
-        <input type="number" id="f-porcaja" placeholder="0" inputmode="decimal"
-               oninput="pistaDelBulto()">
-      </div>
-      <div>
-        <label class="lbl">¿Cómo se llama el bulto?</label>
+        <label class="lbl">El bulto se llama</label>
         <input type="text" id="f-nombrecaja" placeholder="Caja" list="lista-bultos"
                oninput="pistaDelBulto()">
         <datalist id="lista-bultos">
           <option>Caja</option><option>Saco</option><option>Paquete</option>
-          <option>Bulto</option><option>Bolsa</option><option>Palet</option>
+          <option>Bulto</option><option>Bolsa</option><option>Quintal</option>
+          <option>Palet</option><option>Docena</option>
         </datalist>
+      </div>
+      <div>
+        <label class="lbl" id="f-porcaja-lbl">Y trae dentro</label>
+        <input type="number" id="f-porcaja" placeholder="0" inputmode="decimal"
+               oninput="pistaDelBulto()">
       </div>
     </div>
     <div class="pista" id="f-bulto-pista">Déjalo en 0 si este producto no viene en bultos.</div>
@@ -1120,11 +1128,12 @@
          rápido: una venta de mostrador no necesita cliente. Hace falta en cuanto
          queda algo a deber, porque si no no hay a quién cobrárselo. -->
     <label class="lbl">Cliente</label>
-    <div style="display:flex;gap:7px">
-      <select id="cobro-cliente" style="flex:1" onchange="pintarFormaCobro()"></select>
-      <button class="btn" style="flex:0 0 auto;padding:11px 14px" data-permiso="clientes"
-              onclick="abrirCliente()" title="Cliente nuevo">+</button>
-    </div>
+    <select id="cobro-cliente" onchange="pintarFormaCobro()"></select>
+    <!-- Un botón con su nombre y de lado a lado. Antes era un cuadradito con un
+         «+» pegado al desplegable, y el dueño no dio con él: en un teléfono, un
+         botón de 40 píxeles al lado de otra cosa que se toca es una trampa. -->
+    <button class="btn ancho" style="margin:8px 0 4px" data-permiso="clientes"
+            onclick="abrirCliente()">+ Crear un cliente nuevo</button>
 
     <!-- Las tres cosas que pasan de verdad en el mostrador. «Paga todo» viene
          puesto: es lo que ocurre casi siempre, y así la venta de siempre se sigue

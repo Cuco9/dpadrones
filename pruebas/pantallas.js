@@ -587,6 +587,39 @@ comp('pero el ingreso NO entra en la comprobación de «hay dinero para sacarlo�
 comp('y el rótulo dice si el dinero entra o sale de esa caja',
   /Entra en la caja de \*/.test(js) && /Sale de la caja de \*/.test(js));
 
+
+console.log('\n=== Ni una palabra de programación en lo que lee el cliente ===');
+// Pedido por el dueño el 3 de septiembre de 2026, con una foto de su teléfono:
+// la pantalla de entrar le decía «abre la consola en la carpeta del proyecto y
+// escribe npm start». Sus palabras: «por ningún motivo pueden salir mensajes que
+// hagan referencia a nada de consola, ni npm start ni nada que tenga que ver con
+// código o programación; eso me expone mi trabajo y hace que no parezca
+// profesional».
+//
+// Un mensaje así no es solo feo: no le sirve de nada a quien lo lee —en un
+// teléfono no hay ninguna consola que abrir— y enseña por dentro un trabajo que
+// se entrega terminado.
+//
+// SE MIRAN LOS TEXTOS, NO EL CÓDIGO. En app.js se sacan los literales de texto,
+// que es lo único que puede acabar en una pantalla; el código y los comentarios
+// se quedan fuera, porque ahí estas palabras son normales y necesarias —hay una
+// comprobación de direcciones que nombra «localhost» y está perfectamente—.
+const JERGA = /\b(npm|consola|localhost|node_modules|package\.json|sqlite|stacktrace)\b/i;
+const literales = t => (t.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || []);
+const sinComentariosHTML = t => t.replace(/<!--[\s\S]*?-->/g, ' ');
+
+const enJS = literales(js).filter(t => JERGA.test(t));
+comp('en app.js no se le enseña jerga de programación a nadie', !enJS.length,
+  enJS.slice(0, 3).join(' · ').slice(0, 200));
+const enHTML = sinComentariosHTML(html).match(JERGA);
+comp('en index.html no se le enseña jerga de programación a nadie', !enHTML,
+  enHTML ? 'sale «' + enHTML[0] + '»' : '');
+// Y la prueba no vale nada si no caza lo que tiene que cazar: se le da el
+// mensaje de aquel día y tiene que saltar.
+comp('y la comprobación caza el mensaje que salió en el teléfono',
+  literales("throw new Error('Comprueba que está arrancado: escribe npm start en la consola.');")
+    .some(t => JERGA.test(t)));
+
 console.log('\n=== Las palabras de la pantalla ===');
 // Pedido por el dueño: «hay palabras que no son muy profesionales».
 // La única «aparato» que queda es el nombre de la columna de la tabla de
