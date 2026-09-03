@@ -98,6 +98,17 @@ CREATE TABLE IF NOT EXISTS productos (
   nombre       TEXT NOT NULL,
   categoria    TEXT NOT NULL DEFAULT '',
   um           TEXT NOT NULL DEFAULT 'Unidad',
+  -- EL BULTO (DECISIONES.md #44). El almacén principal cuenta por cajas o por
+  -- sacos y las tiendas por unidades, y es el MISMO producto: por dentro todo
+  -- son unidades siempre, y esto solo dice cuántas trae un bulto para poder
+  -- escribir «3 cajas» y para poder leer «240 uds (10 cajas)».
+  --
+  -- Guardar la existencia del almacén en cajas y la de la tienda en unidades
+  -- sería que un mismo número significara dos cosas según dónde se mire, y
+  -- entonces sumarlas —el valor del inventario, el mínimo, un traslado— no
+  -- significaría nada. 0 = este producto no viene en bultos.
+  unidades_por_caja REAL NOT NULL DEFAULT 0,
+  nombre_caja  TEXT,
   costo        REAL NOT NULL DEFAULT 0,
   costo_repo   REAL NOT NULL DEFAULT 0,
   -- El precio se pone UNA vez, en la moneda que se quiera. El otro lo calcula
@@ -173,6 +184,24 @@ CREATE VIEW IF NOT EXISTS stock AS
   SELECT sitio_id, producto_id, SUM(cantidad) AS cantidad
   FROM movimientos GROUP BY sitio_id, producto_id;
 
+-- ─── CLIENTES ─────────────────────────────────────────────────
+-- Solo hacen falta para lo que se fía (DECISIONES.md #43). Una venta al
+-- mostrador no necesita ninguno; una que queda a deber, sí, porque si no no hay
+-- a quién cobrársela. Es una ficha y no un nombre escrito a mano a propósito:
+-- «Juan» y «Juan Pérez» escritos dos días distintos son dos deudas partidas, y
+-- entonces el total de lo que debe alguien no significa nada.
+CREATE TABLE IF NOT EXISTS clientes (
+  id           TEXT PRIMARY KEY,
+  nombre       TEXT NOT NULL,
+  telefono     TEXT,
+  direccion    TEXT,
+  nota         TEXT,
+  activo       INTEGER NOT NULL DEFAULT 1,
+  creado_en    TEXT NOT NULL,
+  actualizado  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_clientes_actualizado ON clientes(actualizado);
+
 -- ─── VENTAS ───────────────────────────────────────────────────
 -- Cabecera. Las líneas son movimientos con ref_tipo='venta'.
 CREATE TABLE IF NOT EXISTS ventas (
@@ -192,13 +221,52 @@ CREATE TABLE IF NOT EXISTS ventas (
   costo_total  REAL NOT NULL DEFAULT 0,
   comision     REAL NOT NULL DEFAULT 0,
   forma_pago   TEXT NOT NULL DEFAULT 'efectivo',
+  -- 'cliente' es el nombre suelto de siempre, y se queda por lo ya escrito.
+  -- 'cliente_id' es la ficha, y es la que manda para saber quién debe qué.
   cliente      TEXT,
+  cliente_id   TEXT REFERENCES clientes(id),
   anulada_en   TEXT,
   fecha        TEXT NOT NULL,
   ts           INTEGER NOT NULL,
   creado_en    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(sitio_id, fecha);
+
+-- ─── COBROS: el dinero de una venta, que puede llegar en varias veces ──
+-- LO COBRADO NO SE GUARDA, SE SUMA (misma regla que el stock, #1): lo que lleva
+-- pagado una venta es la suma de sus cobros, y lo que falta es su total menos
+-- eso. Guardar un «pagado» que se va editando sería tener dos verdades, y el día
+-- que no coincidan no habría manera de saber cuál miente.
+--
+-- Una venta al mostrador es UNA venta con UN cobro por el total, hecho en el
+-- mismo momento. Una fiada es la misma venta sin cobro todavía, o con cobros más
+-- pequeños según vaya pagando. No hay dos clases de venta: hay una, y el dinero
+-- llega cuando llega.
+--
+-- Y EL DINERO ENTRA EN LA CAJA POR EL COBRO, NO POR LA VENTA. Si entrara por la
+-- venta, el cuadre de la noche esperaría un efectivo que nadie ha traído y el
+-- descuadre saldría todos los días sin que nada esté mal.
+--
+-- 'fondo_id' es el apunte del fondo que generó este cobro: hace falta para poder
+-- deshacerlo con su contrario y no a ojo. Y 'anula_a' apunta al cobro que
+-- corrige, como en todo lo demás: nada se edita ni se borra (#2).
+CREATE TABLE IF NOT EXISTS cobros (
+  id           TEXT PRIMARY KEY,
+  venta_id     TEXT NOT NULL REFERENCES ventas(id),
+  sitio_id     TEXT NOT NULL REFERENCES sitios(id),
+  persona_id   TEXT,
+  moneda       TEXT NOT NULL DEFAULT 'CUP' CHECK (moneda IN ('CUP','USD')),
+  importe      REAL NOT NULL,
+  fondo_id     TEXT,
+  anula_a      TEXT REFERENCES cobros(id),
+  nota         TEXT,
+  fecha        TEXT NOT NULL,
+  ts           INTEGER NOT NULL,
+  creado_en    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cobros_venta ON cobros(venta_id);
+CREATE INDEX IF NOT EXISTS idx_cobros_fecha ON cobros(sitio_id, fecha);
+CREATE INDEX IF NOT EXISTS idx_cobros_creado ON cobros(creado_en);
 
 -- ─── DÍAS ─────────────────────────────────────────────────────
 -- Un día cerrado no se toca (DECISIONES.md #5). El inventario inicial del día

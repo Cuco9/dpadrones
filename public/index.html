@@ -330,12 +330,15 @@
 
   <!-- ═══ DINERO ═══ -->
   <section id="p-dinero" class="pantalla">
-    <div class="pestanas">
+    <div class="pestanas cuatro">
       <button class="activa" onclick="pestanaDinero('fondo',this)">Fondo</button>
       <button onclick="pestanaDinero('inversiones',this)">Inversiones</button>
       <!-- Las comisiones estaban en Ajustes, y ahí no era su sitio: pagarle a
            alguien es una operación de dinero, no un ajuste (DECISIONES.md #37). -->
       <button data-permiso="ver_comisiones" onclick="pestanaDinero('comisiones',this)">Comisiones</button>
+      <!-- Lo que se fía vive en Dinero y no en la Caja: es dinero que falta por
+           entrar, y se mira desde el mismo sitio que el resto (DECISIONES.md #43). -->
+      <button data-permiso="ver_por_cobrar" onclick="pestanaDinero('porcobrar',this)">Por cobrar</button>
     </div>
 
     <!-- Fondo -->
@@ -457,6 +460,31 @@
     <!-- Comisiones. Estaba en Ajustes → Personal y su sitio es este: aquí está el
          dinero, y pagar una comisión SACA dinero de una caja de verdad (#32). En
          Ajustes queda lo que sí es configuración: en qué moneda cobra cada uno. -->
+    <!-- Por cobrar -->
+    <div id="t-porcobrar" style="display:none">
+      <div class="tarjeta">
+        <h2>Lo que está por cobrar</h2>
+        <div style="text-align:center">
+          <div class="saldo num" id="pc-total">0 CUP</div>
+          <div class="saldo num" id="pc-total-usd" style="font-size:26px;color:var(--acento-osc)">0 USD</div>
+        </div>
+        <div class="pista" style="text-align:center">Mercancía que ya salió y que todavía
+          nadie ha pagado. No está en ninguna caja: por eso se cuenta aparte.</div>
+        <button class="btn ancho" style="margin-top:12px" data-permiso="clientes"
+                onclick="abrirCliente()">Cliente nuevo</button>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Quién debe</h2>
+        <div id="pc-lista"></div>
+      </div>
+
+      <div class="tarjeta" data-permiso="ver_clientes">
+        <h2>Todos los clientes</h2>
+        <div id="pc-clientes"></div>
+      </div>
+    </div>
+
     <div id="t-comisiones" style="display:none">
       <div class="tarjeta">
         <h2>Comisiones</h2>
@@ -962,6 +990,28 @@
       </div>
     </div>
 
+    <!-- EL BULTO (DECISIONES.md #44). El almacén cuenta por cajas o por sacos y
+         las tiendas por unidades, y es el mismo producto: por dentro todo son
+         unidades siempre. Esto solo dice cuántas trae un bulto, para poder
+         escribir «3 cajas» al despachar y para poder leer «240 (10 cajas)». -->
+    <div class="dosCol">
+      <div>
+        <label class="lbl">Una caja o saco trae</label>
+        <input type="number" id="f-porcaja" placeholder="0" inputmode="decimal"
+               oninput="pistaDelBulto()">
+      </div>
+      <div>
+        <label class="lbl">¿Cómo se llama el bulto?</label>
+        <input type="text" id="f-nombrecaja" placeholder="Caja" list="lista-bultos"
+               oninput="pistaDelBulto()">
+        <datalist id="lista-bultos">
+          <option>Caja</option><option>Saco</option><option>Paquete</option>
+          <option>Bulto</option><option>Bolsa</option><option>Palet</option>
+        </datalist>
+      </div>
+    </div>
+    <div class="pista" id="f-bulto-pista">Déjalo en 0 si este producto no viene en bultos.</div>
+
     <!-- El costo se GUARDA siempre en pesos, aunque se compre en dólares: si
          cada producto llevara su moneda, el valor del almacén y el cuadre del
          día no significarían nada. Pero escribirlo en dólares y hacer la cuenta
@@ -1066,11 +1116,85 @@
     <h3>Cobrar</h3>
     <div class="codigoGrande" id="cobro-total" style="color:var(--acento-osc)">0 CUP</div>
     <div id="cobro-detalle" class="pista"></div>
-    <label class="lbl">Cliente (opcional)</label>
-    <input type="text" id="cobro-cliente" placeholder="Nombre o teléfono">
+    <!-- De quién es la venta (DECISIONES.md #43). Vacío es lo normal y lo más
+         rápido: una venta de mostrador no necesita cliente. Hace falta en cuanto
+         queda algo a deber, porque si no no hay a quién cobrárselo. -->
+    <label class="lbl">Cliente</label>
+    <div style="display:flex;gap:7px">
+      <select id="cobro-cliente" style="flex:1" onchange="pintarFormaCobro()"></select>
+      <button class="btn" style="flex:0 0 auto;padding:11px 14px" data-permiso="clientes"
+              onclick="abrirCliente()" title="Cliente nuevo">+</button>
+    </div>
+
+    <!-- Las tres cosas que pasan de verdad en el mostrador. «Paga todo» viene
+         puesto: es lo que ocurre casi siempre, y así la venta de siempre se sigue
+         cobrando con los mismos toques que antes. -->
+    <label class="lbl">¿Cómo paga?</label>
+    <div class="pestanas" id="cobro-formas" data-permiso="fiar">
+      <button type="button" class="activa" onclick="ponerFormaCobro('todo',this)">Paga todo</button>
+      <button type="button" onclick="ponerFormaCobro('parte',this)">Una parte</button>
+      <button type="button" onclick="ponerFormaCobro('nada',this)">A deber</button>
+    </div>
+    <div id="cobro-parte" style="display:none">
+      <label class="lbl">¿Cuánto trae ahora?</label>
+      <input type="number" inputmode="decimal" id="cobro-entrega" placeholder="0"
+             oninput="pintarFormaCobro()">
+    </div>
+    <div class="pista" id="cobro-debe"></div>
     <div id="cobro-aviso"></div>
     <div class="btnFila">
       <button class="btn primario ancho" id="btn-confirmar" onclick="confirmarVenta()">Confirmar venta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FICHA DE UN CLIENTE ═══ -->
+<div class="velo" id="velo-cliente" onclick="if(event.target===this)cerrarCliente()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarCliente()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3 id="cl-titulo">Cliente nuevo</h3>
+    <label class="lbl">Nombre</label>
+    <input type="text" id="cl-nombre" placeholder="Ej: Juan Pérez">
+    <label class="lbl">Teléfono</label>
+    <input type="text" id="cl-telefono" inputmode="tel" placeholder="Para poder llamarlo">
+    <label class="lbl">Dirección</label>
+    <input type="text" id="cl-direccion" placeholder="Opcional">
+    <label class="lbl">Nota</label>
+    <input type="text" id="cl-nota" placeholder="Opcional">
+    <div id="cl-deuda" class="pista"></div>
+    <div class="btnFila">
+      <button class="btn primario" style="flex:2" onclick="guardarCliente()">Guardar</button>
+      <button class="btn peligro" id="cl-baja" style="flex:1;display:none"
+              onclick="darDeBajaCliente()">Dar de baja</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ APUNTAR LO QUE TRAE UN CLIENTE ═══ -->
+<div class="velo" id="velo-cobrar" onclick="if(event.target===this)cerrarCobrarVenta()">
+  <div class="modal">
+    <button class="cerrar" onclick="cerrarCobrarVenta()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <h3>Apuntar un pago</h3>
+    <div id="cv-cabecera" class="pista"></div>
+    <div class="codigoGrande" id="cv-falta" style="color:var(--acento-osc)">0</div>
+    <div class="pista" style="text-align:center;margin-top:-6px">es lo que falta por pagar</div>
+    <label class="lbl">¿Cuánto trae?</label>
+    <input type="number" inputmode="decimal" id="cv-importe" placeholder="0">
+    <button class="btn ancho" style="margin-bottom:10px" onclick="cobrarloTodo()">Trae todo lo que falta</button>
+    <!-- Dónde entra el dinero. Por defecto la caja de la venta; si lo paga en
+         otro local, el dinero acaba en ESA gaveta y hay que decirlo. -->
+    <label class="lbl">¿En qué caja entra?</label>
+    <select id="cv-sitio"></select>
+    <label class="lbl">Nota</label>
+    <input type="text" id="cv-nota" placeholder="Opcional">
+    <div id="cv-aviso"></div>
+    <div id="cv-apuntes"></div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarCobroVenta()">Apuntar el pago</button>
     </div>
   </div>
 </div>
@@ -1278,6 +1402,10 @@
         <label class="lbl">Cantidad *</label>
         <input type="number" id="mov-cant" placeholder="0" inputmode="decimal"
                oninput="alPonerCantMov()">
+        <!-- Solo sale si ese producto viene en bultos (#44). Para los demás,
+             ofrecer «cajas» sería ofrecer una forma de equivocarse. -->
+        <select id="mov-medida" style="display:none;margin-top:6px"
+                onchange="alPonerCantMov()"></select>
       </div>
       <div id="mov-costo-caja">
         <!-- La moneda se escribe al abrir: el negocio se mide en la suya, y

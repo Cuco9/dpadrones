@@ -202,6 +202,60 @@ function initDB() {
     if (hay) { db.exec('DROP TABLE ' + vieja); console.log('[migracion] quitada la tabla ' + vieja); }
   }
 
+  // De qué cliente es cada venta (DECISIONES.md #43). Vacío = venta de
+  // mostrador, que es la inmensa mayoría y no necesita ninguno.
+  anadir('ventas', 'cliente_id', 'TEXT');
+
+  // El bulto: cuántas unidades trae una caja o un saco, y cómo se llama (#44).
+  // 0 es «no viene en bultos», que es lo que tienen todos los de antes: así
+  // ningún producto cambia de comportamiento al desplegar esto.
+  anadir('productos', 'unidades_por_caja', 'REAL NOT NULL DEFAULT 0');
+  anadir('productos', 'nombre_caja', 'TEXT');
+  // El indice va AQUI y no en el esquema: sobre una base que ya existe, el
+  // `CREATE TABLE IF NOT EXISTS` de ventas no hace nada —la tabla ya esta— y el
+  // indice se crearia sobre una columna que todavia no se ha anadido. El
+  // servidor no arrancaria, y el fallo saldria en el VPS y no aqui. Lo cazo
+  // `pruebas/actualizar.js`, que es exactamente para lo que existe.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_ventas_cliente ON ventas(cliente_id)`);
+
+  // LO COBRADO DE CADA VENTA DE ANTES. Hasta hoy toda venta se cobraba entera en
+  // el acto, así que a cada una le toca un cobro por su total. Va con SU fecha y
+  // SU momento, no con los de hoy: con la fecha de la migración, el efectivo de
+  // todos los días anteriores se mudaría al día del despliegue y no volvería a
+  // cuadrar ni un cierre.
+  //
+  // Aquí NO se apunta nada en el fondo: el ingreso de esas ventas ya está
+  // escrito desde el día que se hicieron. Lo que falta es el cobro que lo
+  // explica, y es lo único que se escribe.
+  //
+  // Las anuladas se quedan fuera: su ingreso ya se deshizo con el apunte
+  // contrario, y darles un cobro las dejaría contando un dinero que se devolvió.
+  //
+  // Ojo con nuevoId() y ahoraISO(): se declaran más abajo con 'const' y desde
+  // aquí todavía no existen. Por eso van a pelo, como en la migración de arriba.
+  if (!ajuste('cobros_de_ventas_viejas')) {
+    const selloM = new Date().toISOString();
+    const insCobro = db.prepare(`INSERT INTO cobros
+        (id,venta_id,sitio_id,persona_id,moneda,importe,fondo_id,nota,fecha,ts,creado_en)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    const buscaApunte = db.prepare(`SELECT id FROM fondo
+        WHERE ref_tipo='venta' AND ref_id=? AND importe > 0 ORDER BY ts LIMIT 1`);
+    const viejas = db.prepare(`SELECT v.* FROM ventas v
+        WHERE v.anulada_en IS NULL AND v.total > 0
+          AND NOT EXISTS (SELECT 1 FROM cobros c WHERE c.venta_id = v.id)`).all();
+    db.transaction(() => {
+      for (const v of viejas) {
+        const apunte = buscaApunte.get(v.id);
+        insCobro.run(require('crypto').randomUUID(), v.id, v.sitio_id, v.persona_id,
+                     v.moneda || 'CUP', v.total, apunte ? apunte.id : null,
+                     'Cobrada en el acto', v.fecha, v.ts, selloM);
+      }
+    })();
+    ajuste('cobros_de_ventas_viejas', selloM);
+    console.log('[migracion] ' + viejas.length +
+      ' venta(s) de antes quedan como cobradas enteras');
+  }
+
   console.log('✓ Base de datos lista:', RUTA_DB);
 }
 initDB();
@@ -267,7 +321,29 @@ function siguienteCodigo() {
   return 'DP-' + String(n).padStart(4, '0');
 }
 
-// La foto llega ya encogida desde el aparato. Aquí solo se pone un techo: una
+// ─── ESCRIBIR EN CAJAS, GUARDAR EN UNIDADES (DECISIONES.md #44) ─────
+// Por dentro TODO son unidades, siempre. Las cajas son una forma de escribir la
+// cantidad y de leerla, nunca un dato guardado: así el stock de un producto
+// significa lo mismo en el almacén que en la tienda, y sumarlos tiene sentido.
+//
+// La cuenta la hace el SERVIDOR y no la pantalla (#10). Si la hiciera la
+// pantalla, un dispositivo con el código viejo mandaría «3» queriendo decir tres
+// cajas y entrarían tres unidades, y nadie lo notaría hasta contar el estante.
+//
+// Va en una sola función por la que pasan todos los caminos —entradas, mermas,
+// ajustes, traslados y recepciones—: la misma regla escrita cinco veces son
+// cinco reglas que un día dejan de coincidir.
+function cantidadEnUnidades(prod, cantidad, medida) {
+  const c = Number(cantidad) || 0;
+  if (medida !== 'caja') return c;
+  const por = Number(prod.unidades_por_caja) || 0;
+  if (por <= 0) throw new Error('De «' + prod.nombre + '» no está dicho cuántas unidades ' +
+    'trae una caja. Ponlo en la ficha del producto, o escribe la cantidad en ' +
+    (prod.um || 'unidades') + '.');
+  return c * por;
+}
+
+// La foto llega ya encogida desde el dispositivo. Aquí solo se pone un techo: una
 // imagen enorme engordaría la base de datos y, sobre todo, cada paquete de
 // sincronización que viaje por WhatsApp.
 const FOTO_MAX = 400000;   // ~400 KB de texto base64
@@ -294,6 +370,7 @@ function revisarFoto(f) {
 // y se colaba en la respuesta sin que nadie tuviera que escribirla.
 const CAMPOS_PRODUCTO = `id, codigo, codigo_barra, nombre, categoria, um, costo,
   costo_repo, precio, precio_moneda, comision, comision_pct, stock_min, destacado,
+  unidades_por_caja, nombre_caja,
   creado_en, actualizado,
   (foto IS NOT NULL) tiene_foto`;
 
@@ -1273,13 +1350,16 @@ app.post('/api/productos', exige('gestionar_productos'), (req, res) => {
     error: 'La foto es demasiado grande. Hazla otra vez desde la aplicación.' });
   db.prepare(`INSERT INTO productos
       (id, codigo, codigo_barra, nombre, categoria, um, costo, costo_repo, precio,
-       precio_moneda, comision, comision_pct, stock_min, foto, destacado, creado_en, actualizado)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+       precio_moneda, comision, comision_pct, stock_min, foto, destacado,
+       unidades_por_caja, nombre_caja, creado_en, actualizado)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, codigo, b.codigo_barra || null, String(b.nombre).trim(), b.categoria || '',
          b.um || 'Unidad', Number(b.costo) || 0, Number(b.costo_repo) || 0,
          Number(b.precio) || 0, b.precio_moneda === 'USD' ? 'USD' : 'CUP',
          Number(b.comision) || 0, b.comision_pct ? 1 : 0,
-         Number(b.stock_min) || 0, foto, b.destacado ? 1 : 0, ahora, ahora);
+         Number(b.stock_min) || 0, foto, b.destacado ? 1 : 0,
+         Math.max(0, Number(b.unidades_por_caja) || 0),
+         (b.nombre_caja && String(b.nombre_caja).trim().slice(0, 20)) || null, ahora, ahora);
   guardarPreciosSitio(id, b.precios);
   res.json({ ok: true, id, codigo });
 });
@@ -1303,12 +1383,18 @@ app.put('/api/productos/:id', exige('gestionar_productos'), (req, res) => {
   }
   db.prepare(`UPDATE productos SET codigo_barra=?, nombre=?, categoria=?, um=?, costo=?,
       costo_repo=?, precio=?, precio_moneda=?, comision=?, comision_pct=?, stock_min=?,
-      foto=?, destacado=?, actualizado=? WHERE id=?`)
+      foto=?, destacado=?, unidades_por_caja=?, nombre_caja=?, actualizado=? WHERE id=?`)
     .run(b.codigo_barra || null, String(b.nombre || '').trim(), b.categoria || '',
          b.um || 'Unidad', Number(b.costo) || 0, Number(b.costo_repo) || 0,
          Number(b.precio) || 0, b.precio_moneda === 'USD' ? 'USD' : 'CUP',
          Number(b.comision) || 0, b.comision_pct ? 1 : 0,
-         Number(b.stock_min) || 0, foto, b.destacado ? 1 : 0, ahoraISO(), req.params.id);
+         Number(b.stock_min) || 0, foto, b.destacado ? 1 : 0,
+         // Cambiar cuántas unidades trae una caja NO toca ni un movimiento: lo
+         // guardado son unidades, y esto solo dice cómo se escriben y cómo se
+         // leen a partir de ahora (#44). Por eso se puede corregir sin miedo.
+         Math.max(0, Number(b.unidades_por_caja) || 0),
+         (b.nombre_caja && String(b.nombre_caja).trim().slice(0, 20)) || null,
+         ahoraISO(), req.params.id);
   guardarPreciosSitio(req.params.id, b.precios);
   res.json({ ok: true });
 });
@@ -1853,6 +1939,65 @@ const dejaVenderSinStock = () => ajuste('vender_sin_stock') === '1';
 // Una venta = una fila en 'ventas' (la cabecera) + una fila en 'movimientos'
 // por cada producto, con cantidad NEGATIVA. El stock baja porque baja la suma,
 // no porque se reescriba ningún número.
+// ─── LO QUE SE FÍA (DECISIONES.md #43) ────────────────────────
+// Un céntimo de margen. Comparando REAL contra 0 pelado, una venta de 1 000 CUP
+// cobrada en tres veces puede quedarse debiendo 0,0000001 para siempre y no
+// llegar nunca a «cobrada», y nadie entendería por qué.
+const CENTAVO = 0.005;
+
+// Lo cobrado de una venta es la SUMA de sus cobros: no se guarda en ninguna
+// columna. Es la regla del stock (#1) aplicada al dinero — guardar un «pagado»
+// que se va editando serían dos verdades sobre lo mismo, y el día que no
+// coincidieran no habría forma de saber cuál miente.
+const cobradoDe = ventaId =>
+  db.prepare('SELECT COALESCE(SUM(importe),0) v FROM cobros WHERE venta_id=?').get(ventaId).v;
+
+// Y el estado tampoco se guarda: se lee de la resta. Un estado guardado que
+// alguien pueda cambiar a mano acabaría diciendo «cobrada» de una venta que
+// nadie pagó, y no habría manera de notarlo.
+function conCobros(v) {
+  const m = v.moneda || 'CUP';
+  const cobrado = redondear(cobradoDe(v.id), m);
+  const falta = redondear(Math.max(0, v.total - cobrado), m);
+  v.cobrado = cobrado;
+  v.falta = falta;
+  v.estado_cobro = v.anulada_en ? 'anulada'
+    : (falta <= CENTAVO ? 'cobrada' : (cobrado > CENTAVO ? 'parcial' : 'pendiente'));
+  return v;
+}
+
+// El cliente de una venta, comprobado. Un id inventado dejaría la deuda
+// apuntando a nadie, que es la forma de que no se la cobre nunca.
+function elCliente(id) {
+  const v = String(id || '').trim();
+  if (!v) return null;
+  const c = db.prepare('SELECT * FROM clientes WHERE id=? AND activo=1').get(v);
+  if (!c) throw new Error('Ese cliente no existe, o está dado de baja');
+  return c;
+}
+
+// Apuntar un cobro: la fila del cobro y el dinero entrando en la caja, siempre
+// las dos cosas juntas. Devuelve el cobro.
+//
+// EL DINERO ENTRA POR AQUÍ Y NO POR LA VENTA. Si entrara por la venta, el cuadre
+// de la noche esperaría un efectivo que nadie ha traído y el descuadre saldría
+// todos los días sin que nada estuviera mal.
+function apuntarCobro(a) {
+  const moneda = a.moneda === 'USD' ? 'USD' : 'CUP';
+  const fondoId = apuntarFondo({
+    tipo: 'ingreso', subtipo: 'venta', moneda, importe: a.importe, sitio_id: a.sitio_id,
+    persona_id: a.persona_id || null, concepto: a.concepto || 'Venta',
+    ref_tipo: 'venta', ref_id: a.venta_id, fecha: a.fecha, ts: a.ts
+  });
+  const id = nuevoId();
+  db.prepare(`INSERT INTO cobros
+      (id,venta_id,sitio_id,persona_id,moneda,importe,fondo_id,anula_a,nota,fecha,ts,creado_en)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, a.venta_id, a.sitio_id, a.persona_id || null, moneda, a.importe,
+         fondoId, a.anula_a || null, a.nota || null, a.fecha, a.ts, ahoraISO());
+  return id;
+}
+
 app.post('/api/ventas', exige('vender'), (req, res) => {
   const b = req.body || {};
   const sitio = b.sitio_id;
@@ -1866,8 +2011,9 @@ app.post('/api/ventas', exige('vender'), (req, res) => {
   if (siCerradoCortar(res, sitio, fecha)) return;
 
   const insVenta = db.prepare(`INSERT INTO ventas
-    (id,sitio_id,aparato_id,persona_id,moneda,tasa,total,costo_total,comision,forma_pago,cliente,fecha,ts,creado_en)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    (id,sitio_id,aparato_id,persona_id,moneda,tasa,total,costo_total,comision,forma_pago,
+     cliente,cliente_id,fecha,ts,creado_en)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   const insMov = db.prepare(`INSERT INTO movimientos
     (id,tipo,sitio_id,aparato_id,persona_id,producto_id,cantidad,costo_unit,precio_unit,
      ref_tipo,ref_id,fecha,ts,creado_en)
@@ -1910,28 +2056,66 @@ app.post('/api/ventas', exige('vender'), (req, res) => {
       insMov.run(nuevoId(), sitio, b.aparato_id || null, req.persona.id,
                  prod.id, -cant, prod.costo, precio, ventaId, fecha, ts, ahora);
     }
+    // De quién es esta venta, si es de alguien (DECISIONES.md #43).
+    const cliente = elCliente(b.cliente_id);
+
+    // LO QUE PAGA AHORA. No decir nada es la venta de siempre: se cobra entera en
+    // el acto, y por eso ninguna venta de mostrador cambia de comportamiento al
+    // desplegar esto. Decir 0 es fiarla entera; decir una cifra es dejar a deber
+    // el resto.
+    let pagaAhora = (b.cobrado_ahora === undefined || b.cobrado_ahora === null)
+      ? total : (Number(b.cobrado_ahora) || 0);
+    if (pagaAhora < 0) throw new Error('Lo que paga no puede ser menos que nada');
+    if (pagaAhora > total + CENTAVO)
+      throw new Error('No se puede cobrar más de lo que vale la venta');
+    if (pagaAhora > total) pagaAhora = total;
+    const queda = total - pagaAhora;
+
+    // LO QUE QUEDA A DEBER TIENE QUE TENER DUEÑO. Una deuda sin cliente no se le
+    // puede cobrar a nadie: dentro de un mes es dinero perdido y ni siquiera se
+    // sabe de quién era. Por eso esto se para aquí y no se avisa y ya.
+    if (queda > CENTAVO && !cliente) throw new Error(
+      'Esta venta queda a deber ' + redondear(queda, moneda) + ' ' + moneda +
+      '. Di de qué cliente es, o cóbrala entera: una deuda sin cliente no se le ' +
+      'puede cobrar a nadie.');
+
+    // Y FIAR ES UN PERMISO APARTE, comprobado aquí y no solo escondiendo los
+    // botones (#10 y #35): quien despacha puede vender sin poder decidir a quién
+    // se le fía, que es una decisión del dueño y no del mostrador. Se comprueba
+    // solo si queda algo a deber: cobrar entero lo puede hacer cualquiera que
+    // venda, como siempre.
+    if (queda > CENTAVO && !puede(req, 'fiar')) throw new Error(
+      'No tienes permiso para dejar una venta a deber. Cóbrala entera, o que te ' +
+      'den el permiso «Dejar una venta a deber».');
+
     // El cambio del día se congela con la venta. Sin esto, tocar el valor del
     // dólar en Ajustes movería las ganancias de todos los meses anteriores,
     // incluidas las jornadas ya cerradas (DECISIONES.md #21).
     insVenta.run(ventaId, sitio, b.aparato_id || null, req.persona.id, moneda, tasaUSD(),
                  total, costoTotal, comisionTotal, 'efectivo',
-                 b.cliente || null, fecha, ts, ahora);
-    // El dinero de la venta entra al fondo en el momento. Ojo con leerlo: el
-    // fondo cuenta también lo que sigue en la gaveta de cada punto.
-    apuntarFondo({
-      tipo: 'ingreso', subtipo: 'venta', moneda, importe: total, sitio_id: sitio,
-      concepto: 'Venta', ref_tipo: 'venta', ref_id: ventaId, fecha, ts
+                 (cliente && cliente.nombre) || b.cliente || null,
+                 cliente ? cliente.id : null, fecha, ts, ahora);
+    // El dinero entra por el COBRO, no por la venta: lo que se fía no entra en
+    // ninguna caja hasta que el cliente lo trae. Ojo con leer el fondo: cuenta
+    // también lo que sigue en la gaveta de cada punto.
+    if (pagaAhora > CENTAVO) apuntarCobro({
+      venta_id: ventaId, sitio_id: sitio, persona_id: req.persona.id, moneda,
+      importe: pagaAhora, fecha, ts,
+      concepto: queda > CENTAVO ? 'Venta (entrega a cuenta)' : 'Venta',
+      nota: queda > CENTAVO ? 'Pagado al llevarse la mercancía' : null
     });
     // Aquí no hay que decir a qué inversión pertenece la venta: si el producto
     // entró con una, sus unidades se cuentan solas al sacar las cuentas de esa
     // inversión. Preguntarlo en la caja sería una decisión más en el peor
     // momento, y una forma nueva de equivocarse.
-    return { total, comisionTotal, moneda };
+    return { total, comisionTotal, moneda, pagaAhora, queda };
   });
 
   try {
     const r = hacer();
-    res.json({ ok: true, id: ventaId, total: r.total, moneda: r.moneda, comision: r.comisionTotal });
+    res.json({ ok: true, id: ventaId, total: r.total, moneda: r.moneda,
+               comision: r.comisionTotal, cobrado: r.pagaAhora,
+               falta: redondear(r.queda, r.moneda) });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -1947,8 +2131,159 @@ app.get('/api/ventas', exige('ver_ventas'), (req, res) => {
       ORDER BY m.ts`).all(sitio, fecha);
   const porVenta = {};
   lineas.forEach(l => (porVenta[l.ref_id] = porVenta[l.ref_id] || []).push(l));
-  ventas.forEach(v => { v.lineas = porVenta[v.id] || []; });
+  ventas.forEach(v => { v.lineas = porVenta[v.id] || []; conCobros(v); });
   res.json({ ventas });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  CLIENTES Y LO QUE SE FÍA (DECISIONES.md #43)
+// ═══════════════════════════════════════════════════════════════
+// Un cliente es una FICHA y no un nombre escrito a mano en cada venta. Escrito a
+// mano, «Juan», «Juan P.» y «juan perez» son tres deudas distintas de la misma
+// persona, y entonces «cuánto me debe Juan» no tiene respuesta.
+
+app.get('/api/clientes', exige('ver_clientes'), (req, res) => {
+  const filas = db.prepare('SELECT * FROM clientes WHERE activo=1 ORDER BY nombre').all();
+  res.json({ clientes: filas });
+});
+
+app.post('/api/clientes', exige('clientes'), (req, res) => {
+  const b = req.body || {};
+  const nombre = String(b.nombre || '').trim();
+  if (nombre.length < 2) return res.status(400).json({ error: 'Ponle nombre al cliente' });
+  const ahora = ahoraISO();
+  const id = b.id || nuevoId();
+  const existe = b.id && db.prepare('SELECT 1 FROM clientes WHERE id=?').get(b.id);
+  if (existe) {
+    db.prepare(`UPDATE clientes SET nombre=?, telefono=?, direccion=?, nota=?, actualizado=?
+        WHERE id=?`).run(nombre, b.telefono || null, b.direccion || null, b.nota || null,
+                         ahora, id);
+  } else {
+    db.prepare(`INSERT INTO clientes (id,nombre,telefono,direccion,nota,activo,creado_en,actualizado)
+        VALUES (?,?,?,?,?,1,?,?)`)
+      .run(id, nombre, b.telefono || null, b.direccion || null, b.nota || null, ahora, ahora);
+  }
+  res.json({ ok: true, id });
+});
+
+// Baja, no borrado: sus ventas siguen nombrándolo, y borrarlo dejaría la deuda
+// apuntando a nadie (#2). Y no se da de baja a quien debe algo: sería esconder
+// una deuda en vez de cobrarla.
+app.delete('/api/clientes/:id', exige('clientes'), (req, res) => {
+  const debe = deudaDe(req.params.id);
+  if (debe.total > CENTAVO) return res.status(400).json({
+    error: 'Ese cliente todavía debe ' + redondear(debe.total, debe.moneda) + ' ' + debe.moneda +
+           '. Cóbrale o anula esas ventas antes de darlo de baja.' });
+  db.prepare('UPDATE clientes SET activo=0, actualizado=? WHERE id=?')
+    .run(ahoraISO(), req.params.id);
+  res.json({ ok: true });
+});
+
+// Lo que debe un cliente. Va por moneda, como todo el dinero de esta aplicación:
+// sumar CUP con USD daría un número que no significa nada (#21). En la práctica
+// casi todo será CUP, pero «casi todo» no es «todo».
+function deudaDe(clienteId, sitios) {
+  const ventas = db.prepare(`SELECT * FROM ventas
+      WHERE cliente_id=? AND anulada_en IS NULL`).all(String(clienteId || ''))
+    .filter(v => !sitios || sitios.has(v.sitio_id))
+    .map(conCobros)
+    .filter(v => v.falta > CENTAVO);
+  const porMoneda = { CUP: 0, USD: 0 };
+  ventas.forEach(v => { porMoneda[v.moneda === 'USD' ? 'USD' : 'CUP'] += v.falta; });
+  // La moneda «de la deuda» es la que tenga algo; si hay de las dos se dice CUP
+  // y el detalle va por venta, que es donde se cobra de verdad.
+  const moneda = porMoneda.CUP > CENTAVO || porMoneda.USD <= CENTAVO ? 'CUP' : 'USD';
+  return { ventas, por_moneda: porMoneda, moneda, total: porMoneda[moneda],
+           dos_monedas: porMoneda.CUP > CENTAVO && porMoneda.USD > CENTAVO };
+}
+
+// La pantalla de lo que está por cobrar: cada cliente con lo que debe y de qué
+// ventas viene. Solo de los locales que esta persona puede ver (#39).
+app.get('/api/por-cobrar', exige('ver_por_cobrar'), (req, res) => {
+  const sitios = sitiosDe(req);
+  const clientes = db.prepare('SELECT * FROM clientes WHERE activo=1 ORDER BY nombre').all();
+  const conDeuda = [];
+  let totalCUP = 0, totalUSD = 0;
+  for (const c of clientes) {
+    const d = deudaDe(c.id, sitios);
+    if (!d.ventas.length) continue;
+    totalCUP += d.por_moneda.CUP; totalUSD += d.por_moneda.USD;
+    conDeuda.push(Object.assign({}, c, {
+      debe: d.por_moneda, dos_monedas: d.dos_monedas,
+      ventas: d.ventas.map(v => ({ id: v.id, fecha: v.fecha, moneda: v.moneda,
+        total: v.total, cobrado: v.cobrado, falta: v.falta, estado_cobro: v.estado_cobro }))
+    }));
+  }
+  // Lo fiado SIN cliente no debería existir —el servidor no deja fiar sin
+  // decir a quién— pero una base traída de otra copia puede traerlo. Si aparece
+  // se dice, en vez de esconderlo: es dinero que no se le puede cobrar a nadie.
+  const huerfanas = db.prepare(`SELECT * FROM ventas
+      WHERE cliente_id IS NULL AND anulada_en IS NULL`).all()
+    .filter(v => !sitios || sitios.has(v.sitio_id))
+    .map(conCobros).filter(v => v.falta > CENTAVO);
+  res.json({ clientes: conDeuda, sin_cliente: huerfanas,
+             total: { CUP: redondear(totalCUP, 'CUP'), USD: redondear(totalUSD, 'USD') } });
+});
+
+// Apuntar lo que trae el cliente. Puede traerlo todo o una parte, y puede venir
+// muchas veces: cada visita es un cobro, y no se edita ninguno de los anteriores.
+app.post('/api/ventas/:id/cobrar', exige('cobrar_ventas'), (req, res) => {
+  const b = req.body || {};
+  const venta = db.prepare('SELECT * FROM ventas WHERE id=?').get(String(req.params.id));
+  if (!venta) return res.status(404).json({ error: 'Esa venta no existe' });
+  if (venta.anulada_en) return res.status(400).json({ error: 'Esa venta está anulada' });
+  conCobros(venta);
+  if (venta.falta <= CENTAVO) return res.status(400).json({
+    error: 'Esa venta ya está cobrada entera.' });
+
+  const moneda = venta.moneda === 'USD' ? 'USD' : 'CUP';
+  // El importe se redondea a la moneda ANTES de comparar: en pesos, 1 000,4 no
+  // existe, y comparar el número sin redondear deja deudas de céntimos que no se
+  // pueden pagar con ningún billete.
+  const importe = redondear(Number(b.importe) || 0, moneda);
+  if (importe <= 0) return res.status(400).json({ error: 'Escribe cuánto trae' });
+  if (importe > venta.falta + CENTAVO) return res.status(400).json({
+    error: 'De esa venta solo faltan ' + venta.falta + ' ' + moneda +
+           '. No se puede cobrar de más: si sobra dinero, es otra venta o un ingreso aparte.' });
+
+  // Dónde entra el dinero. Por defecto en la caja de la venta; si lo pagan en
+  // otro local, se dice, porque el dinero acaba en ESA gaveta y no en la otra.
+  const sitio = b.sitio_id ? String(b.sitio_id) : venta.sitio_id;
+  if (!db.prepare('SELECT 1 FROM sitios WHERE id=? AND activo=1').get(sitio))
+    return res.status(400).json({ error: 'Ese local no existe, o está apagado' });
+  const fecha = b.fecha || ahoraISO().slice(0, 10);
+  // El día del COBRO tiene que estar abierto donde entra el dinero (#5): si no,
+  // el efectivo de una jornada ya cerrada cambiaría después de cerrarla.
+  if (siCerradoCortar(res, sitio, fecha)) return;
+
+  const id = apuntarCobro({
+    venta_id: venta.id, sitio_id: sitio, persona_id: req.persona.id, moneda, importe,
+    fecha, ts: Date.now(), concepto: 'Cobro de venta fiada',
+    nota: b.nota ? String(b.nota).slice(0, 200) : null
+  });
+  const despues = conCobros(db.prepare('SELECT * FROM ventas WHERE id=?').get(venta.id));
+  res.json({ ok: true, id, cobrado: despues.cobrado, falta: despues.falta,
+             estado_cobro: despues.estado_cobro });
+});
+
+// Un cobro mal apuntado se deshace con su contrario, no se borra (#2 y #31): el
+// dinero entró y salió, y las dos cosas tienen que verse.
+app.post('/api/cobros/:id/anular', exige('corregir_dinero'), (req, res) => {
+  const c = db.prepare('SELECT * FROM cobros WHERE id=?').get(String(req.params.id));
+  if (!c) return res.status(404).json({ error: 'Ese cobro no existe' });
+  if (c.anula_a) return res.status(400).json({ error: 'Ese apunte ya es el contrario de otro' });
+  const ya = db.prepare('SELECT 1 FROM cobros WHERE anula_a=?').get(c.id);
+  if (ya) return res.status(400).json({ error: 'Ese cobro ya estaba anulado' });
+  const fecha = ahoraISO().slice(0, 10), ts = Date.now();
+  if (siCerradoCortar(res, c.sitio_id, fecha)) return;
+  db.transaction(() => {
+    // El contrario lleva la fecha de HOY, no la del cobro: corregir hoy no puede
+    // mover el dinero de una jornada que ya se cerró (misma regla que la #31).
+    apuntarCobro({ venta_id: c.venta_id, sitio_id: c.sitio_id, persona_id: req.persona.id,
+                   moneda: c.moneda, importe: -c.importe, fecha, ts, anula_a: c.id,
+                   concepto: 'Cobro anulado', nota: 'Anula un cobro de ' + c.fecha });
+  })();
+  res.json({ ok: true });
 });
 
 // Anular NO borra: mete el movimiento contrario apuntando al original
@@ -1972,9 +2307,28 @@ app.post('/api/ventas/:id/anular', exige('anular_venta'), (req, res) => {
     db.prepare('UPDATE ventas SET anulada_en=? WHERE id=?').run(ahora, req.params.id);
     // El dinero también se deshace, con un apunte contrario. El ingreso
     // original se queda: el fondo cuenta lo que pasó, no lo que quedó.
-    apuntarFondo({ tipo: 'ingreso', subtipo: 'venta', moneda: venta.moneda || 'CUP',
-                   importe: -venta.total, sitio_id: venta.sitio_id, concepto: 'Venta anulada',
-                   ref_tipo: 'venta', ref_id: venta.id, fecha: venta.fecha, ts });
+    //
+    // Y SE DEVUELVE LO QUE SE COBRÓ, NO EL TOTAL (DECISIONES.md #43): de una
+    // venta fiada que nadie ha pagado no hay nada que sacar de la caja, y
+    // devolver su total dejaría la gaveta con menos dinero del que tiene.
+    const cobrado = cobradoDe(venta.id);
+    if (Math.abs(cobrado) > CENTAVO) apuntarFondo({
+      tipo: 'ingreso', subtipo: 'venta', moneda: venta.moneda || 'CUP',
+      importe: -cobrado, sitio_id: venta.sitio_id, concepto: 'Venta anulada',
+      ref_tipo: 'venta', ref_id: venta.id, fecha: venta.fecha, ts });
+    // Y los cobros se deshacen uno por uno, con su contrario, para que la venta
+    // quede en cero cobrado y no arrastre una deuda de algo que ya no existe.
+    const suyos = db.prepare('SELECT * FROM cobros WHERE venta_id=?').all(venta.id);
+    const insAnula = db.prepare(`INSERT INTO cobros
+        (id,venta_id,sitio_id,persona_id,moneda,importe,fondo_id,anula_a,nota,fecha,ts,creado_en)
+        VALUES (?,?,?,?,?,?,NULL,?,?,?,?,?)`);
+    for (const c of suyos) {
+      if (c.anula_a) continue;                       // ya es un contrario
+      const yaAnulado = suyos.some(x => x.anula_a === c.id);
+      if (yaAnulado) continue;
+      insAnula.run(nuevoId(), venta.id, c.sitio_id, c.persona_id, c.moneda, -c.importe,
+                   c.id, 'Venta anulada', c.fecha, ts, ahora);
+    }
   })();
   res.json({ ok: true });
 });
@@ -2012,6 +2366,10 @@ const TABLAS_SYNC = [
   { t: 'cargos',            marca: 'actualizado', modo: 'reciente' },
   { t: 'personas',          marca: 'actualizado', modo: 'reciente' },
   { t: 'productos',         marca: 'actualizado', modo: 'reciente' },
+  // Los clientes se editan poco y desde cualquier aparato: gana el más reciente,
+  // como los productos. Dar de baja es poner 'activo' en 0 y no borrar la fila,
+  // así que la baja viaja igual que el alta.
+  { t: 'clientes',          marca: 'actualizado', modo: 'reciente' },
   { t: 'precios_sitio',     marca: 'actualizado', modo: 'reciente', clave: ['producto_id', 'sitio_id'] },
   // Las inversiones viajan con sus líneas. Los BORRADORES no
   // salen: mientras se están escribiendo cambian a cada rato, y una lista que
@@ -2034,6 +2392,10 @@ const TABLAS_SYNC = [
   { t: 'traslados',         marca: ['despachado_en', 'recibido_en'], modo: 'traslado' },
   { t: 'conteos',           marca: 'creado_en',   modo: 'apunte' },
   { t: 'fondo',             marca: 'creado_en',   modo: 'apunte' },
+  // Los cobros son apuntes: nacen y no cambian nunca. Anular uno es escribir el
+  // contrario, así que la anulación viaja como una fila más y no hay que mirar
+  // ninguna columna que se rellene después (que es la trampa de 'ventas').
+  { t: 'cobros',            marca: 'creado_en',   modo: 'apunte' },
   { t: 'dias',              marca: null,          modo: 'dia',      clave: ['sitio_id', 'fecha'] },
   // Quiénes trabajaron cada día. Dueño único: el sitio donde se apunta. Gana la
   // versión más reciente, y como desmarcar a alguien es poner 'presente' en 0 y
@@ -2205,6 +2567,16 @@ const PERMISOS = [
   { area: 'Caja y ventas', id: 'ver_ventas',    nombre: 'Ver las ventas del día y sus fichas' },
   { area: 'Caja y ventas', id: 'anular_venta',  nombre: 'Anular una venta ya cobrada',
     implica: ['ver_ventas'] },
+  // ── Lo que se fía ──
+  { area: 'Clientes y deudas', id: 'ver_clientes', nombre: 'Ver la lista de clientes' },
+  { area: 'Clientes y deudas', id: 'clientes',     nombre: 'Crear y editar clientes',
+    implica: ['ver_clientes'] },
+  { area: 'Clientes y deudas', id: 'fiar',         nombre: 'Dejar una venta a deber',
+    implica: ['vender', 'ver_clientes'] },
+  { area: 'Clientes y deudas', id: 'ver_por_cobrar', nombre: 'Ver lo que deben los clientes',
+    implica: ['ver_clientes'] },
+  { area: 'Clientes y deudas', id: 'cobrar_ventas', nombre: 'Apuntar lo que trae un cliente',
+    implica: ['ver_por_cobrar', 'ver_fondo'] },
   // ── El catálogo ──
   { area: 'Catálogo', id: 'ver_catalogo',       nombre: 'Ver los productos y lo que hay' },
   { area: 'Catálogo', id: 'gestionar_productos',nombre: 'Crear y editar productos',
@@ -2519,7 +2891,13 @@ app.post('/api/movimientos', exige('gestionar_inventario'), (req, res) => {
   const fechaMov = b.fecha || ahoraISO().slice(0, 10);
   if (b.tipo !== 'ajuste' && siCerradoCortar(res, b.sitio_id, fechaMov)) return;
 
-  let cantidad = Number(b.cantidad);
+  // Se puede escribir en cajas y se guarda en unidades (#44). Si el producto no
+  // tiene bulto puesto, esto se niega en vez de guardar la cifra tal cual: dar
+  // por hecho que «3 cajas» son 3 unidades es meter mercancía de menos y no
+  // enterarse.
+  let cantidad;
+  try { cantidad = cantidadEnUnidades(prod, b.cantidad, b.medida); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
   if (!cantidad || isNaN(cantidad)) return res.status(400).json({ error: 'Cantidad no válida' });
   // El ajuste puede ser en los dos sentidos y llega ya con su signo; los demás
   // lo tienen fijo, para que no dependa de que el aparato lo mande bien.
@@ -2586,7 +2964,11 @@ app.post('/api/traslados', exige('traslados_enviar'), (req, res) => {
       for (const l of lineas) {
         const prod = db.prepare('SELECT * FROM productos WHERE id=? AND borrado_en IS NULL').get(l.producto_id);
         if (!prod) throw new Error('Un producto del traslado ya no existe');
-        const cant = Math.abs(Number(l.cantidad) || 0);
+        // Aquí es donde hace falta de verdad (#44): el almacén cuenta por cajas
+        // y despacha a la tienda, que cuenta por unidades. Se escribe «3 cajas» y
+        // salen 72 unidades del almacén y entran 72 en la tienda: el mismo
+        // número, porque por dentro todo son unidades.
+        const cant = Math.abs(cantidadEnUnidades(prod, l.cantidad, l.medida));
         if (!cant) throw new Error('Cantidad no válida');
         pedidos.push({ sitio_id: b.origen_id, producto_id: prod.id, cantidad: cant,
                        nombre: prod.nombre, um: prod.um, prod, cant });
@@ -2655,7 +3037,12 @@ app.post('/api/traslados/:id/recibir', exige('traslados_recibir'), (req, res) =>
       for (const l of lineas) {
         const env = mapaEnv[l.producto_id];
         if (!env) throw new Error('Ese producto no venía en el traslado');
-        const cant = Math.abs(Number(l.cantidad) || 0);
+        // Quien recibe cuenta lo que tiene delante, y lo que tiene delante son
+        // cajas (#44). Se escribe en cajas y se compara en unidades con lo que
+        // salió, que es la única forma de que «faltó una caja» sea una cuenta y
+        // no una discusión.
+        const prodR = db.prepare('SELECT * FROM productos WHERE id=?').get(l.producto_id) || {};
+        const cant = Math.abs(cantidadEnUnidades(prodR, l.cantidad, l.medida));
         if (cant > env.cant) throw new Error('No se puede recibir más de lo que se despachó');
         if (cant < env.cant) completo = false;
         if (cant > 0) ins.run(nuevoId(), t.destino_id, l.producto_id, cant, env.costo,
@@ -2715,8 +3102,21 @@ app.get('/api/dia', exige('ver_ventas', 'cerrar_dia', 'ver_informes'), (req, res
     'SELECT * FROM ventas WHERE sitio_id=? AND fecha=? AND anulada_en IS NULL').all(sitio, fecha);
   // El EFECTIVO que entró va separado por moneda: sumar CUP con USD daría un
   // número sin significado, y al cerrar hay que contar cada gaveta por su lado.
+  //
+  // Y SALE DE LOS COBROS, NO DE LAS VENTAS (DECISIONES.md #43). Son dos cosas
+  // distintas desde que se puede fiar: lo que se fía hoy no está en la gaveta
+  // esta noche, y lo que se cobra hoy de una venta de la semana pasada sí. Con
+  // las ventas, el cuadre daría un descuadre todos los días sin que nada
+  // estuviera mal, y es justo lo que este número existe para detectar.
   const porMoneda = { CUP: 0, USD: 0 };
-  ventas.forEach(v => { porMoneda[v.moneda === 'USD' ? 'USD' : 'CUP'] += v.total; });
+  db.prepare(`SELECT c.moneda, COALESCE(SUM(c.importe),0) v FROM cobros c
+      JOIN ventas ve ON ve.id = c.venta_id
+      WHERE c.sitio_id=? AND c.fecha=? AND ve.anulada_en IS NULL
+      GROUP BY c.moneda`).all(sitio, fecha)
+    .forEach(f => { porMoneda[f.moneda === 'USD' ? 'USD' : 'CUP'] += f.v; });
+  // Lo que se fió HOY y sigue sin cobrar. No es un descuadre: es mercancía que
+  // salió y dinero que todavía no ha entrado, y hay que poder verlo esa noche.
+  const fiadoHoy = ventas.reduce((t, v) => t + Math.max(0, v.total - cobradoDe(v.id)), 0);
   // Lo VENDIDO, en cambio, se mide en la moneda del negocio, cada venta con el
   // cambio que tenía su día. Es la única forma de restarle el costo y que la
   // ganancia signifique algo (DECISIONES.md #21).
@@ -2749,7 +3149,11 @@ app.get('/api/dia', exige('ver_ventas', 'cerrar_dia', 'ver_informes'), (req, res
       // Si alguna venta necesitaba el cambio y no lo había, se dice: mejor un
       // aviso que una ganancia que se ha comido una venta entera sin avisar.
       sin_tasa: cuentas.sin_tasa,
-      comision: ventas.reduce((s, v) => s + v.comision, 0)
+      comision: ventas.reduce((s, v) => s + v.comision, 0),
+      // Lo que se llevaron hoy sin pagar. La ganancia de arriba lo cuenta —la
+      // mercancía salió— y el efectivo de abajo no, que es justo la diferencia
+      // entre las dos cifras y la razón de enseñarla.
+      fiado: redondear(fiadoHoy, monedaBase())
     },
     // Lo que cuesta la gente ese día y lo que queda después. La «ganancia» de
     // arriba sigue siendo la de siempre —lo vendido menos la mercancía—, para que
@@ -3246,7 +3650,9 @@ const GRUPOS_BORRADO = {
     detalle: 'Las ventas, las entradas, las mermas, los traslados, los conteos y los días ' +
              'cerrados. El inventario queda en cero y hay que volver a contarlo.',
     // Los movimientos de una inversión se van con SU grupo.
-    tablas: ['ventas', 'conteos', 'dias', 'traslados'],
+    // Los cobros van DELANTE de las ventas: apuntan a ellas, y borrar la venta
+    // dejando el cobro sería dejar dinero cobrado de algo que ya no existe.
+    tablas: ['cobros', 'ventas', 'conteos', 'dias', 'traslados'],
     extra: db => ({
       movimientos: db.prepare(`DELETE FROM movimientos
         WHERE COALESCE(ref_tipo,'') <> 'inversion'`).run().changes,
@@ -3274,6 +3680,14 @@ const GRUPOS_BORRADO = {
       fondo: db.prepare("DELETE FROM fondo WHERE COALESCE(ref_tipo,'')='inversion'").run().changes,
     }),
     cuenta: db => db.prepare('SELECT COUNT(*) n FROM inversiones').get().n,
+  },
+  clientes: {
+    nombre: 'Los clientes',
+    detalle: 'Las fichas de los clientes. Hay que borrar antes las ventas: si no, ' +
+             'quedarían deudas apuntando a alguien que ya no está.',
+    tablas: ['clientes'],
+    exige: ['ventas'],
+    cuenta: db => db.prepare('SELECT COUNT(*) n FROM clientes').get().n,
   },
   catalogo: {
     nombre: 'El catálogo de productos',
@@ -3414,7 +3828,14 @@ app.get('/api/ventas/:id', exige('ver_ventas'), (req, res) => {
       WHERE v.id=?`).get(String(req.params.id));
   if (!v) return res.status(404).json({ error: 'Esa venta no está en esta copia' });
   if (!puede(req, 'ver_ganancias')) { v.costo_total = null; v.comision = null; }
-  res.json({ venta: v, lineas: db.prepare(`SELECT m.cantidad, m.precio_unit, pr.nombre, pr.um
+  conCobros(v);
+  // Los cobros, uno por uno y con el que anula a cuál: de una venta que se fue
+  // pagando en cuatro veces, saber cuánto falta no basta —hace falta ver cuándo
+  // trajo cada parte, que es lo que se discute con el cliente delante—.
+  const cobros = db.prepare(`SELECT c.*, p.nombre persona, s.nombre sitio FROM cobros c
+      LEFT JOIN personas p ON p.id=c.persona_id LEFT JOIN sitios s ON s.id=c.sitio_id
+      WHERE c.venta_id=? ORDER BY c.ts, c.creado_en`).all(v.id);
+  res.json({ venta: v, cobros, lineas: db.prepare(`SELECT m.cantidad, m.precio_unit, pr.nombre, pr.um
       FROM movimientos m LEFT JOIN productos pr ON pr.id=m.producto_id
       WHERE m.ref_tipo='venta' AND m.ref_id=? AND m.anula_a IS NULL`).all(v.id) });
 });

@@ -99,7 +99,7 @@ function cuentas(ruta) {
   const db = new Database(ruta, { readonly: true });
   const n = {};
   for (const t of ['sitios', 'productos', 'movimientos', 'ventas', 'fondo',
-                   'personas', 'inversiones', 'clientes']) {
+                   'personas', 'inversiones', 'clientes', 'cobros']) {
     try { n[t] = db.prepare('SELECT COUNT(*) n FROM ' + t).get().n; } catch (e) { n[t] = -1; }
   }
   db.close();
@@ -234,9 +234,39 @@ function sacarDeGit(commit, destino) {
       (s2.texto().match(/.*(Error|SQLITE_|no such).*/i) || [''])[0]);
 
     const despues = cuentas(dbActualizada);
-    comp('no se pierde ni un dato al actualizar',
-      JSON.stringify(antes) === JSON.stringify(despues),
-      'antes ' + JSON.stringify(antes) + ' · después ' + JSON.stringify(despues));
+    // Lo que no puede pasar es PERDER: una tabla que existía no puede quedarse
+    // con menos filas, ni desaparecer (que aquí se cuenta como −1). Que una tabla
+    // pase de no existir a existir VACÍA no es una pérdida: es una tabla nueva
+    // del cambio que se está desplegando, y exigir que las dos cuentas sean
+    // idénticas obligaba a tocar esta prueba cada vez que nace una tabla —por el
+    // motivo equivocado, y con el riesgo de acostumbrarse a cambiarla sin mirar—.
+    const perdidas = Object.keys(antes).filter(t => antes[t] >= 0 && despues[t] < antes[t]);
+    comp('no se pierde ni un dato al actualizar', perdidas.length === 0,
+      'pierden filas: ' + perdidas.join(', ') + ' · antes ' + JSON.stringify(antes) +
+      ' · después ' + JSON.stringify(despues));
+    // LA MIGRACIÓN DE LO QUE SE FÍA, mirada sobre una base VIEJA de verdad y no
+    // sobre una recién creada: hasta ese cambio toda venta se cobraba entera en
+    // el acto, así que a cada una le tiene que tocar un cobro por su total. Si se
+    // quedara alguna sin él, aparecería como pendiente de cobro un dinero que se
+    // pagó hace meses, y el dueño saldría a cobrarle a un cliente que no debe nada.
+    const rev = new Database(dbActualizada, { readonly: true });
+    const ventasVivas = rev.prepare(
+      'SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM ventas WHERE anulada_en IS NULL').get();
+    const cobrado = rev.prepare('SELECT COUNT(*) n, COALESCE(SUM(importe),0) t FROM cobros').get();
+    const sinCobro = rev.prepare(`SELECT COUNT(*) n FROM ventas v WHERE v.anulada_en IS NULL
+        AND NOT EXISTS (SELECT 1 FROM cobros c WHERE c.venta_id=v.id)`).get().n;
+    const fechasRaras = rev.prepare(`SELECT COUNT(*) n FROM cobros c
+        JOIN ventas v ON v.id=c.venta_id WHERE c.fecha <> v.fecha`).get().n;
+    rev.close();
+    comp('cada venta de antes queda con su cobro', sinCobro === 0 && cobrado.n === ventasVivas.n,
+      'ventas ' + ventasVivas.n + ' · cobros ' + cobrado.n + ' · sin cobro ' + sinCobro);
+    comp('y por el importe entero, ni un peso de más ni de menos',
+      Math.abs(cobrado.t - ventasVivas.t) < 0.005,
+      'ventas ' + ventasVivas.t + ' · cobros ' + cobrado.t);
+    // Con la fecha de HOY, el efectivo de todos los días anteriores se mudaría al
+    // día del despliegue y no volvería a cuadrar ni un cierre de los ya cerrados.
+    comp('con la fecha de SU venta, no la del día del despliegue', fechasRaras === 0,
+      fechasRaras + ' cobro(s) con otra fecha');
 
     console.log('\n=== El esquema tiene que quedar igual que uno recién creado ===');
     // Aquí es donde salta una columna que se añadió a db/esquema.sql y se olvidó

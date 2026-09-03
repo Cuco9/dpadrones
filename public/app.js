@@ -5,6 +5,7 @@
 
 let PRODUCTOS = [];
 let SITIOS = [];
+let CLIENTES = [];        // los que se han dado de alta, para poder fiarles (#43)
 let editando = null;      // id del producto abierto en la ficha, o null si es nuevo
 // La foto de la ficha abierta, ya encogida. Tres valores y los tres significan algo
 // distinto: unos datos = foto nueva; null = quitarla; undefined = no se ha tocado,
@@ -213,6 +214,7 @@ async function cargarCatalogo() {
     SITIOS = d.sitios || [];
     rellenarCategorias();
     pintarSelectorSitio();
+    await cargarClientes();
     await cargarStock();
     renderCarro();
     // La rejilla de la caja se dibuja AQUI. Antes solo se rehacia al escribir en
@@ -222,6 +224,71 @@ async function cargarCatalogo() {
     console.error('No se pudo cargar el catálogo:', e.message);
   }
 }
+
+// Lo que se está diciendo, escrito debajo mientras se escribe: «una caja trae 24
+// unidades» leído en voz alta es lo que evita teclear 24 donde iban 240.
+// El plural, para no escribir «24 unidad» ni «en cajas» cuando el bulto es un
+// saco. Vocal + s, consonante + es: vale para unidad→unidades, saco→sacos,
+// metro→metros y caja→cajas, que es todo lo que se teclea aquí.
+const enPlural = p => {
+  const t = String(p || '').trim();
+  if (!t) return t;
+  return /[aeiouáéíóú]$/i.test(t) ? t + 's' : t + 'es';
+};
+
+function pistaDelBulto() {
+  const caja = $('f-bulto-pista');
+  if (!caja) return;
+  const por = parseFloat($('f-porcaja').value) || 0;
+  const nombre = ($('f-nombrecaja').value.trim() || 'caja').toLowerCase();
+  const um = ($('f-um').value.trim() || 'unidad').toLowerCase();
+  // «Cada caja» y no «un caja» / «una caja»: así no hay que acertar el género de
+  // una palabra que escribe el dueño y que puede ser cualquiera.
+  caja.innerHTML = por > 0
+    ? 'Cada <b>' + esc(nombre) + '</b> trae <b>' + por + ' ' +
+      esc(por === 1 ? um : enPlural(um)) + '</b>. Al apuntar una entrada o un despacho ' +
+      'podrás escribir en ' + esc(enPlural(nombre)) + ', y la aplicación guarda ' +
+      'las ' + esc(enPlural(um)) + '. <b>La existencia siempre se cuenta en ' +
+      esc(enPlural(um)) + '.</b>'
+    : 'Déjalo en 0 si este producto no viene en bultos.';
+}
+
+// ─── LEER UNA CANTIDAD EN BULTOS (DECISIONES.md #44) ─────────
+// Por dentro todo son unidades. Esto solo traduce para leer: «240» en un estante
+// que se cuenta por cajas de 24 se mira mejor como «10 cajas».
+//
+// Se calcula con el factor de HOY, y es lo correcto: es una forma de leer la
+// existencia de ahora, no un dato guardado. Por eso cambiar «una caja trae 24»
+// por «trae 12» no reescribe ningún movimiento — no hay nada que reescribir.
+//
+// Si no sale ni una caja entera no se dice nada: «0 cajas y 7» no ayuda a nadie.
+function enBultos(p, unidades) {
+  const por = Number(p && p.unidades_por_caja) || 0;
+  const u = Math.abs(Number(unidades) || 0);
+  if (por <= 0 || !u) return '';
+  const cajas = Math.floor(u / por);
+  if (!cajas) return '';
+  const sueltas = Math.round((u - cajas * por) * 10000) / 10000;
+  const nombre = (p.nombre_caja || 'caja').toLowerCase();
+  return cajas + ' ' + (cajas === 1 || nombre.endsWith('s') ? nombre : nombre + 's') +
+         (sueltas > 0.0001 ? ' y ' + sueltas : '');
+}
+
+// El nombre del bulto tal como se enseña en un DESPLEGABLE: «Caja (de 24)».
+const rotuloBulto = p => {
+  const nombre = (p && p.nombre_caja) || 'Caja';
+  return nombre + (p && p.unidades_por_caja ? ' (de ' + p.unidades_por_caja + ')' : '');
+};
+
+// Y tal como se lee dentro de una FRASE: «3 cajas de 24». El rótulo del
+// desplegable no vale aquí —«3 Caja (de 24)» no se lee— y son dos usos distintos
+// de la misma palabra, así que son dos funciones.
+const bultosEscritos = (p, cuantos) => {
+  const nombre = ((p && p.nombre_caja) || 'caja').toLowerCase();
+  const por = Number(p && p.unidades_por_caja) || 0;
+  return cuantos + ' ' + (cuantos === 1 ? nombre : enPlural(nombre)) +
+         (por ? ' de ' + por : '');
+};
 
 // Las categorías que existen, para el desplegable de la caja y para la lista de
 // sugerencias de la ficha del producto. El del almacén se rellena aparte, al
@@ -345,6 +412,9 @@ function abrirFicha(id) {
   $('f-precio-moneda').value = p ? (p.precio_moneda || 'CUP') : 'CUP';
   equivalencia();
   $('f-stockmin').value = p ? p.stock_min : '';
+  $('f-porcaja').value = p && p.unidades_por_caja > 0 ? p.unidades_por_caja : '';
+  $('f-nombrecaja').value = p ? (p.nombre_caja || '') : '';
+  pistaDelBulto();
 
   // La existencia inicial solo se pregunta al CREAR, y solo a quien puede mover
   // mercancía: apuntarla es registrar una entrada, y eso tiene su propio permiso.
@@ -417,6 +487,10 @@ async function guardarProducto() {
     precio,
     precio_moneda: $('f-precio-moneda').value === 'USD' ? 'USD' : 'CUP',
     stock_min: parseFloat($('f-stockmin').value) || 0,
+    // El bulto (#44). No cambia ni un movimiento: lo guardado son unidades, y
+    // esto solo dice cómo se escriben y cómo se leen de aquí en adelante.
+    unidades_por_caja: parseFloat($('f-porcaja').value) || 0,
+    nombre_caja: $('f-nombrecaja').value.trim() || null,
     // La foto solo va si se ha tocado. JSON.stringify quita las claves con
     // 'undefined', así que no mandarla y mandarla vacía llegan distintas al
     // servidor, que es lo que le deja saber si tiene que dejar la que ya había.
@@ -1056,13 +1130,81 @@ async function guardarDenominaciones() {
 }
 
 // ─── Cobro ────────────────────────────────────────────────────
+// ─── Los clientes ─────────────────────────────────────────────
+// Se cargan con el catálogo y se quedan en el dispositivo, como todo lo demás: la
+// aplicación tiene que poder fiarle a alguien sin internet.
+async function cargarClientes() {
+  if (!puedo('ver_clientes')) { CLIENTES = []; return; }
+  try {
+    const d = await api('/api/clientes');
+    CLIENTES = d.clientes || [];
+  } catch (e) { /* sin permiso o sin conexión: se vende igual, al contado */ }
+  pintarSelectorClientes();
+}
+
+function pintarSelectorClientes() {
+  const sel = $('cobro-cliente');
+  if (!sel) return;
+  const antes = sel.value;
+  sel.innerHTML = '<option value="">Sin cliente — venta de mostrador</option>' +
+    CLIENTES.map(c => `<option value="${c.id}">${esc(c.nombre)}${
+      c.telefono ? ' · ' + esc(c.telefono) : ''}</option>`).join('');
+  sel.value = antes;
+}
+
+// Cómo paga: entera, una parte, o nada todavía. Vive aquí y no en el servidor
+// porque es una pregunta de la pantalla; lo que se manda es un número.
+let FORMA_COBRO = 'todo';
+
+function ponerFormaCobro(cual, btn) {
+  FORMA_COBRO = cual;
+  const caja = $('cobro-formas');
+  if (caja) caja.querySelectorAll('button').forEach(b => b.classList.remove('activa'));
+  if (btn) btn.classList.add('activa');
+  $('cobro-parte').style.display = cual === 'parte' ? 'block' : 'none';
+  if (cual === 'parte') setTimeout(() => $('cobro-entrega').focus(), 60);
+  pintarFormaCobro();
+}
+
+// Lo que entrega ahora, según la forma elegida. Un solo sitio que lo decida: dos
+// cuentas parecidas repartidas por la pantalla acaban no coincidiendo.
+function entregaAhora() {
+  const total = totalCarro();
+  if (FORMA_COBRO === 'todo') return total;
+  if (FORMA_COBRO === 'nada') return 0;
+  const x = parseFloat($('cobro-entrega').value) || 0;
+  return Math.max(0, Math.min(x, total));
+}
+
+function pintarFormaCobro() {
+  const total = totalCarro(), entrega = entregaAhora(), debe = total - entrega;
+  const sinCliente = !$('cobro-cliente').value;
+  // El aviso dice lo que va a pasar ANTES de pulsar, no después de que el
+  // servidor se niegue: quien está en el mostrador tiene al cliente delante.
+  $('cobro-debe').innerHTML = debe <= 0.005 ? ''
+    : (sinCliente
+      ? '<b style="color:var(--rojo)">Quedan ' + dinero(debe, MONEDA) + ' a deber, y hace ' +
+        'falta decir de qué cliente es:</b> una deuda sin cliente no se le puede cobrar a nadie.'
+      : 'Se lleva la mercancía y queda a deber <b>' + dinero(debe, MONEDA) + '</b>. Ese ' +
+        'dinero <b>no entra en la caja</b> hasta que lo traiga.');
+  const btn = $('btn-confirmar');
+  if (btn) btn.textContent = debe <= 0.005 ? 'Confirmar venta'
+    : (entrega > 0.005 ? 'Cobrar ' + dinero(entrega, MONEDA) + ' y fiar el resto'
+                       : 'Fiar la venta entera');
+}
+
 function abrirCobro() {
   if (!CARRO.length) return;
   $('cobro-total').textContent = dinero(totalCarro(), MONEDA);
   const uds = CARRO.reduce((s, l) => s + l.cantidad, 0);
   $('cobro-detalle').textContent =
     CARRO.length + (CARRO.length === 1 ? ' producto' : ' productos') + ', ' + uds + ' unidades';
+  pintarSelectorClientes();
   $('cobro-cliente').value = '';
+  $('cobro-entrega').value = '';
+  // Cada venta empieza en «paga todo»: es lo que pasa casi siempre, y dejar
+  // puesta la forma de la venta anterior sería fiarle sin querer al siguiente.
+  ponerFormaCobro('todo', $('cobro-formas') && $('cobro-formas').querySelector('button'));
   // Con el candado puesto (DECISIONES.md #6) no se cobra lo que no está: el
   // botón se apaga y se dice qué hacer. Sin él, se avisa y se deja pasar.
   const faltan = CARRO.filter(l => l.cantidad > Number(STOCK[l.producto_id] || 0));
@@ -1089,7 +1231,11 @@ async function confirmarVenta() {
       body: JSON.stringify({
         sitio_id: sitioActual(),
         moneda: MONEDA,
-        cliente: $('cobro-cliente').value.trim() || null,
+        cliente_id: $('cobro-cliente').value || null,
+        // Lo que entrega AHORA. Se manda siempre, también cuando paga todo: así
+        // el servidor no tiene que adivinar nada y la venta de mostrador sigue
+        // siendo una venta con su cobro, como todas.
+        cobrado_ahora: entregaAhora(),
         fecha: new Date().toLocaleDateString('sv-SE'),   // AAAA-MM-DD del dispositivo
         lineas: CARRO.map(l => ({ producto_id: l.producto_id, cantidad: l.cantidad }))
       })
@@ -1099,7 +1245,10 @@ async function confirmarVenta() {
     cerrarCobro();
     await cargarStock();
     renderCarro();
-    toast('✓ Venta de ' + dinero(r.total, r.moneda || MONEDA));
+    toast(r.falta > 0.005
+      ? '✓ Venta de ' + dinero(r.total, r.moneda || MONEDA) + ' · quedan ' +
+        dinero(r.falta, r.moneda || MONEDA) + ' a deber'
+      : '✓ Venta de ' + dinero(r.total, r.moneda || MONEDA));
     // Si esa venta acaba de dejar algo bajo mínimo, el aviso sale AHORA, que es
     // cuando sirve de algo: quien está en el mostrador puede apuntarlo antes de
     // que se le olvide. Esperar al repaso de cada tres minutos sería avisar
@@ -1847,9 +1996,12 @@ async function cargarVentas() {
       <div class="venta ${v.anulada_en ? 'anulada' : ''}">
         <div class="cab">
           <span class="hora">${new Date(v.ts).toLocaleTimeString('es-CU', { hour: '2-digit', minute: '2-digit' })}
-            · efectivo ${esc(v.moneda || 'CUP')}${v.cliente ? ' · ' + esc(v.cliente) : ''}</span>
+            · ${esc(v.moneda || 'CUP')}${v.cliente ? ' · ' + esc(v.cliente) : ''}</span>
           <span class="imp">${dinero(v.total, v.moneda)}</span>
         </div>
+        ${!v.anulada_en && v.falta > 0.005 ? `<div class="det" style="color:var(--rojo)">
+          Debe ${dinero(v.falta, v.moneda)}${v.cobrado > 0.005
+            ? ' · pagó ' + dinero(v.cobrado, v.moneda) : ''}</div>` : ''}
         <div class="det">${v.lineas.map(l =>
             esc(l.nombre) + ' ×' + Math.abs(l.cantidad)).join(' · ') || '—'}</div>
         ${v.anulada_en ? '<div class="det" style="color:var(--rojo)">Anulada</div>'
@@ -2011,7 +2163,10 @@ function renderAlmacen() {
       <span class="cod">${esc(p.codigo)}</span>
       <div class="info"><div class="nm">${esc(p.nombre)}</div>
         <div class="sub">${todos ? (reparto || 'Sin existencia en ningún sitio')
-          : esc(p.categoria || 'Sin categoría') + ' · costo ' + enBase(p.costo)}</div></div>
+          : esc(p.categoria || 'Sin categoría') + ' · costo ' + enBase(p.costo)}${
+          // Lo mismo contado en bultos (#44). Es la cifra con la que se cuenta el
+          // estante en el almacén principal: «240» no se cuenta, «10 cajas» sí.
+          enBultos(p, n) ? ' · ' + esc(enBultos(p, n)) : ''}</div></div>
       <div class="pre">${todos
         ? '<b>' + n + '</b><span>' + enBase(n > 0 ? n * (p.costo || 0) : 0) + '</span>'
         : pillStock(p.id) + '<span>' + enBase(n > 0 ? n * (p.costo || 0) : 0) + '</span>'}</div>
@@ -2195,9 +2350,28 @@ function elegirMovProducto(id) {
     $('mov-costo-lbl').textContent = 'Costo por unidad (' + MONEDA_BASE + ')';
     $('mov-actualizar-caja').style.display = 'block';
   }
+  // El desplegable de la medida solo sale si ese producto viene en bultos (#44):
+  // para los demás, ofrecer «cajas» sería ofrecer una forma de equivocarse.
+  const sel = $('mov-medida');
+  if (sel) {
+    const tiene = Number(movProducto.unidades_por_caja) > 0;
+    sel.style.display = tiene ? '' : 'none';
+    sel.innerHTML = !tiene ? '' :
+      '<option value="unidad">' + esc(enPlural(movProducto.um || 'Unidad')) + '</option>' +
+      '<option value="caja">' + esc(rotuloBulto(movProducto)) + '</option>';
+    sel.value = 'unidad';
+  }
   alPonerCantMov();
   setTimeout(() => $('mov-cant').focus(), 60);
 }
+
+// En qué está escrita la cantidad de la entrada: en unidades o en bultos.
+const medidaMov = () => ($('mov-medida') && $('mov-medida').style.display !== 'none'
+  ? $('mov-medida').value : 'unidad');
+// Y cuántas unidades son. La cuenta la vuelve a hacer el servidor, que es quien
+// manda (#10): esto solo sirve para poder enseñarlo antes de guardar.
+const unidadesMov = cant => medidaMov() === 'caja'
+  ? cant * (Number(movProducto && movProducto.unidades_por_caja) || 0) : cant;
 
 // Lo que hay de ese producto en ESTE sitio, y en rojo si la merma se pasa. Es la
 // misma idea que el saldo debajo del desplegable de la caja (#38): la cifra
@@ -2206,10 +2380,22 @@ function hayAquiMov(id) { return Number(STOCK[id] || 0); }
 function alPonerCantMov() {
   const caja = $('mov-hay');
   if (!caja) return;
-  if (!movProducto || movTipo !== 'merma') { caja.innerHTML = ''; return; }
-  const hay = hayAquiMov(movProducto.id);
+  if (!movProducto) { caja.innerHTML = ''; return; }
   const um = movProducto.um && movProducto.um !== 'Unidad' ? ' ' + movProducto.um : '';
-  const cant = parseFloat($('mov-cant').value);
+  // Escribiendo en bultos, lo que se va a guardar se dice ANTES de guardarlo:
+  // «3 cajas = 72 unidades». Sin eso hay que fiarse de una multiplicación hecha
+  // de cabeza, que es justo lo que esto viene a quitar.
+  const escrito = parseFloat($('mov-cant').value);
+  if (medidaMov() === 'caja' && !isNaN(escrito) && escrito > 0) {
+    const uds = unidadesMov(escrito);
+    caja.innerHTML = '<b>' + esc(bultosEscritos(movProducto, escrito)) + ' = ' + uds +
+      ' ' + esc(enPlural(movProducto.um || 'unidad')) + '</b>' +
+      (movTipo === 'merma' ? ' · en este sitio hay ' + hayAquiMov(movProducto.id) + esc(um) : '');
+    return;
+  }
+  if (movTipo !== 'merma') { caja.innerHTML = ''; return; }
+  const hay = hayAquiMov(movProducto.id);
+  const cant = escrito;
   const pasa = !isNaN(cant) && cant > hay + 0.0001;
   caja.innerHTML = pasa
     ? '<b style="color:var(--rojo)">Solo hay ' + hay + um + ' en este sitio</b>, y estás dando ' +
@@ -2221,10 +2407,14 @@ async function guardarMov() {
   if (!movProducto) { toast('⚠ Elige un producto'); return; }
   const cant = parseFloat($('mov-cant').value);
   if (!cant || cant <= 0) { toast('⚠ Pon la cantidad'); $('mov-cant').focus(); return; }
+  // La medida viaja con la cantidad y la convierte el SERVIDOR (#44). Aquí no se
+  // multiplica nada: si se multiplicara aquí y el servidor también, entrarían 576
+  // unidades donde iban 24.
+  const medida = medidaMov();
   // La pantalla para lo evidente; el servidor manda igual (#10). Aquí se usa lo
   // que se trajo al abrir, que puede haber envejecido: si desde otro dispositivo
   // se vendió mientras tanto, quien dice que no es el servidor.
-  if (movTipo === 'merma' && cant > hayAquiMov(movProducto.id) + 0.0001) {
+  if (movTipo === 'merma' && unidadesMov(cant) > hayAquiMov(movProducto.id) + 0.0001) {
     alPonerCantMov();
     toast('⚠ No hay tanto para dar de baja');
     $('mov-cant').focus();
@@ -2235,6 +2425,7 @@ async function guardarMov() {
     sitio_id: sitioActual(),
     producto_id: movProducto.id,
     cantidad: cant,
+    medida,
     obs: $('mov-obs').value.trim() || null,
     fecha: new Date().toLocaleDateString('sv-SE')
   };
@@ -2279,15 +2470,40 @@ function alDespacho(id) {
   $('des-busq').focus();
 }
 
+// Las unidades que salen de una línea del despacho. AQUÍ ES DONDE HACE FALTA EL
+// CAMBIO DE MEDIDA (#44): el almacén cuenta por cajas y la tienda por unidades, y
+// escribir «3» queriendo decir tres cajas tiene que sacar 72 del estante.
+//
+// Esto es para ENSEÑARLO; la cuenta que vale la vuelve a hacer el servidor.
+function udsDespacho(l) {
+  const p = PRODUCTOS.find(x => x.id === l.producto_id);
+  const por = Number(p && p.unidades_por_caja) || 0;
+  return l.medida === 'caja' && por > 0 ? l.cantidad * por : l.cantidad;
+}
+
 function renderDespacho() {
   $('des-carro').innerHTML = DESPACHO.length ? DESPACHO.map(l => {
+    const p = PRODUCTOS.find(x => x.id === l.producto_id) || {};
     const hay = Number(STOCK[l.producto_id] || 0);
+    const uds = udsDespacho(l);
     // Lo que no está no se despacha (#40): se ve en la línea antes de mandar el
     // envío, igual que en los materiales de un trabajo.
-    const falta = l.cantidad > hay + 0.0001;
+    const falta = uds > hay + 0.0001;
+    const enBulto = Number(p.unidades_por_caja) > 0;
     return `<div class="linea">
       <div class="nm">${esc(l.nombre)}<small>${esc(l.codigo)} · ${falta
-        ? '<b style="color:var(--rojo)">solo hay ' + hay + '</b>' : 'hay ' + hay}</small></div>
+        ? '<b style="color:var(--rojo)">solo hay ' + hay + '</b>' : 'hay ' + hay}${
+        enBultos(p, hay) ? ' (' + esc(enBultos(p, hay)) + ')' : ''}</small>
+        ${enBulto ? `<select style="margin-top:4px;font-size:12px;padding:4px 6px"
+            onchange="ponerMedidaDespacho('${l.producto_id}',this.value)">
+          <option value="unidad"${l.medida !== 'caja' ? ' selected' : ''}>${
+            esc(enPlural(p.um || 'Unidad'))}</option>
+          <option value="caja"${l.medida === 'caja' ? ' selected' : ''}>${
+            esc(rotuloBulto(p))}</option>
+        </select>` : ''}
+        ${l.medida === 'caja' ? '<small><b>= ' + uds + ' ' +
+          esc(enPlural(p.um || 'unidad')) + '</b></small>' : ''}
+      </div>
       <div class="cant">
         <button onclick="cantDespacho('${l.producto_id}',-1)">−</button>
         <input type="number" inputmode="decimal" value="${l.cantidad}" style="${
@@ -2297,6 +2513,12 @@ function renderDespacho() {
       </div>
     </div>`;
   }).join('') : '<div class="pista">Busca productos arriba para añadirlos al envío.</div>';
+}
+function ponerMedidaDespacho(id, medida) {
+  const l = DESPACHO.find(x => x.producto_id === id);
+  if (!l) return;
+  l.medida = medida === 'caja' ? 'caja' : 'unidad';
+  renderDespacho();
 }
 function cantDespacho(id, d) {
   const l = DESPACHO.find(x => x.producto_id === id);
@@ -2315,11 +2537,11 @@ function ponerCantDespacho(id, v) {
 
 async function guardarDespacho() {
   if (!DESPACHO.length) { toast('⚠ Añade algún producto'); return; }
-  const pasadas = DESPACHO.filter(l => l.cantidad > Number(STOCK[l.producto_id] || 0) + 0.0001);
+  const pasadas = DESPACHO.filter(l => udsDespacho(l) > Number(STOCK[l.producto_id] || 0) + 0.0001);
   if (pasadas.length) {
     alert('No se puede despachar mercancía que no está:\n\n' +
       pasadas.map(l => '· ' + l.nombre + ': hay ' + Number(STOCK[l.producto_id] || 0) +
-                       ' y estás enviando ' + l.cantidad).join('\n') +
+                       ' y estás enviando ' + udsDespacho(l)).join('\n') +
       '\n\nApunta primero la entrada de esa mercancía, o envía lo que haya de verdad.');
     return;
   }
@@ -2329,7 +2551,11 @@ async function guardarDespacho() {
       destino_id: $('des-destino').value,
       obs: $('des-obs').value.trim() || null,
       fecha: new Date().toLocaleDateString('sv-SE'),
-      lineas: DESPACHO.map(l => ({ producto_id: l.producto_id, cantidad: l.cantidad }))
+      // La medida viaja y la convierte el SERVIDOR (#44 y #10). Si se convirtiera
+      // aquí, un dispositivo con el código viejo mandaría cajas creyendo que manda
+      // unidades y saldría del almacén una fracción de lo que se quería enviar.
+      lineas: DESPACHO.map(l => ({ producto_id: l.producto_id, cantidad: l.cantidad,
+                                   medida: l.medida || 'unidad' }))
     })});
     cerrarDespacho();
     toast('✓ Despachado. Esperando que confirmen allí.');
@@ -2341,14 +2567,18 @@ async function guardarDespacho() {
 function abrirRecibir(id) {
   recibiendo = TRASLADOS.find(t => t.id === id);
   if (!recibiendo) return;
-  $('rec-lineas').innerHTML = recibiendo.enviado.map(l => `
+  $('rec-lineas').innerHTML = recibiendo.enviado.map(l => {
+    const p = PRODUCTOS.find(x => x.id === l.producto_id) || {};
+    const bultos = enBultos(p, l.cantidad);
+    return `
     <div class="linea">
-      <div class="nm">${esc(l.nombre)}<small>${esc(l.codigo)} · salieron ${l.cantidad}</small></div>
+      <div class="nm">${esc(l.nombre)}<small>${esc(l.codigo)} · salieron ${l.cantidad}${
+        bultos ? ' (' + esc(bultos) + ')' : ''}</small></div>
       <div class="cant">
         <input type="number" inputmode="decimal" data-prod="${l.producto_id}"
                value="${l.cantidad}" style="width:70px">
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
   $('velo-recibir').classList.add('abierto');
 }
 function cerrarRecibir() { $('velo-recibir').classList.remove('abierto'); recibiendo = null; }
@@ -2385,11 +2615,184 @@ const SUBTIPOS = {
 function pestanaDinero(cual, btn) {
   document.querySelectorAll('.pestanas button').forEach(b => b.classList.remove('activa'));
   if (btn) btn.classList.add('activa');
-  ['fondo', 'inversiones', 'comisiones'].forEach(x => {
+  ['fondo', 'inversiones', 'comisiones', 'porcobrar'].forEach(x => {
     $('t-' + x).style.display = cual === x ? 'block' : 'none';
   });
   if (cual === 'inversiones') cargarInversiones();
   if (cual === 'comisiones') cargarComisiones();
+  if (cual === 'porcobrar') cargarPorCobrar();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LO QUE ESTÁ POR COBRAR (DECISIONES.md #43)
+// ═══════════════════════════════════════════════════════════════
+// La pregunta que hay que poder contestar es «¿cuánto me debe fulano?», y por eso
+// la lista va por CLIENTE y no por venta: quien viene a pagar es una persona, no
+// un documento, y trae lo que trae para lo que deba.
+let POR_COBRAR = null;
+
+async function cargarPorCobrar() {
+  try {
+    POR_COBRAR = await api('/api/por-cobrar');
+  } catch (e) {
+    $('pc-lista').innerHTML = '<div class="vacio">' + esc(e.message) + '</div>';
+    return;
+  }
+  await cargarClientes();
+  const d = POR_COBRAR;
+  $('pc-total').textContent = dinero(d.total.CUP || 0, 'CUP');
+  $('pc-total-usd').textContent = dinero(d.total.USD || 0, 'USD');
+  $('pc-total-usd').style.display = d.total.USD > 0.005 ? '' : 'none';
+
+  const puedeCobrar = puedo('cobrar_ventas');
+  $('pc-lista').innerHTML = (d.clientes || []).length ? d.clientes.map(c => `
+    <div class="fila" style="align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px">
+        <b>${esc(c.nombre)}</b>${c.telefono ? ' <span class="pista">' + esc(c.telefono) + '</span>' : ''}
+        <div class="pista">${c.ventas.length} ${c.ventas.length === 1 ? 'venta' : 'ventas'} sin terminar de pagar</div>
+      </div>
+      <b class="num" style="color:var(--rojo)">${dinero(c.debe.CUP, 'CUP')}${
+        c.debe.USD > 0.005 ? ' + ' + dinero(c.debe.USD, 'USD') : ''}</b>
+      <div style="flex:1 1 100%;margin-top:6px">
+        ${c.ventas.map(v => `<div class="fila" style="padding:6px 0">
+          <span class="pista">${esc(v.fecha)}${v.cobrado > 0.005
+            ? ' · ya pagó ' + dinero(v.cobrado, v.moneda) : ''}</span>
+          <span>
+            <b class="num">${dinero(v.falta, v.moneda)}</b>
+            ${puedeCobrar ? `<button class="acc" style="margin-left:8px"
+              onclick="abrirCobrarVenta('${v.id}')">Cobrar</button>` : ''}
+          </span>
+        </div>`).join('')}
+      </div>
+    </div>`).join('')
+    : '<div class="vacio">Nadie debe nada. Todo lo que salió está cobrado.</div>';
+
+  // Lo fiado sin cliente no debería existir —el servidor no deja fiar sin decir a
+  // quién—, pero una base traída de otra copia podría traerlo. Si aparece se
+  // dice: es dinero que no se le puede cobrar a nadie.
+  if ((d.sin_cliente || []).length) {
+    $('pc-lista').innerHTML += `<div class="aviso" style="margin-top:10px">
+      <b>Hay ${d.sin_cliente.length} venta(s) sin pagar y sin cliente.</b> No se le pueden
+      cobrar a nadie. Vinieron de otra copia de la aplicación.</div>`;
+  }
+
+  const puedeEditar = puedo('clientes');
+  $('pc-clientes').innerHTML = CLIENTES.length ? CLIENTES.map(c => `
+    <div class="fila">
+      <span>${esc(c.nombre)}${c.telefono ? ' <span class="pista">' + esc(c.telefono) + '</span>' : ''}</span>
+      ${puedeEditar ? `<button class="acc" onclick="abrirCliente('${c.id}')">Editar</button>` : ''}
+    </div>`).join('') : '<div class="vacio">Todavía no hay ningún cliente.</div>';
+}
+
+// ─── La ficha de un cliente ───────────────────────────────────
+let clienteEditando = null;
+
+function abrirCliente(id) {
+  const c = id ? CLIENTES.find(x => x.id === id) : null;
+  clienteEditando = c ? c.id : null;
+  $('cl-titulo').textContent = c ? 'Editar cliente' : 'Cliente nuevo';
+  $('cl-nombre').value = c ? c.nombre : '';
+  $('cl-telefono').value = c ? (c.telefono || '') : '';
+  $('cl-direccion').value = c ? (c.direccion || '') : '';
+  $('cl-nota').value = c ? (c.nota || '') : '';
+  $('cl-baja').style.display = c ? 'inline-flex' : 'none';
+  // Lo que debe, dicho en su propia ficha: es la primera pregunta que se hace
+  // quien la abre, y si no está aquí hay que ir a buscarla a otra pantalla.
+  const deuda = c && POR_COBRAR && (POR_COBRAR.clientes || []).find(x => x.id === c.id);
+  $('cl-deuda').innerHTML = !deuda ? ''
+    : '<b style="color:var(--rojo)">Debe ' + dinero(deuda.debe.CUP, 'CUP') +
+      (deuda.debe.USD > 0.005 ? ' y ' + dinero(deuda.debe.USD, 'USD') : '') +
+      '</b>, de ' + deuda.ventas.length + ' venta(s). Mientras deba algo no se puede dar de baja.';
+  $('velo-cliente').classList.add('abierto');
+  if (!c) setTimeout(() => $('cl-nombre').focus(), 120);
+}
+function cerrarCliente() { $('velo-cliente').classList.remove('abierto'); clienteEditando = null; }
+
+async function guardarCliente() {
+  const nombre = $('cl-nombre').value.trim();
+  if (nombre.length < 2) { toast('⚠ Ponle nombre al cliente'); $('cl-nombre').focus(); return; }
+  try {
+    const r = await api('/api/clientes', { method: 'POST', body: JSON.stringify({
+      id: clienteEditando || undefined, nombre,
+      telefono: $('cl-telefono').value.trim() || null,
+      direccion: $('cl-direccion').value.trim() || null,
+      nota: $('cl-nota').value.trim() || null }) });
+    cerrarCliente();
+    await cargarClientes();
+    // Recién creado desde la caja, se deja elegido: es para lo que se creó.
+    if (!clienteEditando && $('cobro-cliente') &&
+        $('velo-cobro').classList.contains('abierto')) {
+      $('cobro-cliente').value = r.id;
+      pintarFormaCobro();
+    }
+    if ($('t-porcobrar') && $('t-porcobrar').style.display !== 'none') await cargarPorCobrar();
+    toast('✓ Cliente guardado');
+  } catch (e) { alert('No se pudo guardar: ' + e.message); }
+}
+
+async function darDeBajaCliente() {
+  if (!clienteEditando) return;
+  if (!confirm('¿Dar de baja a este cliente?\n\nSus ventas no se tocan: siguen contando ' +
+               'con su nombre. Solo deja de salir en la lista.')) return;
+  try {
+    await api('/api/clientes/' + clienteEditando, { method: 'DELETE' });
+    cerrarCliente();
+    await cargarClientes();
+    if ($('t-porcobrar') && $('t-porcobrar').style.display !== 'none') await cargarPorCobrar();
+    toast('✓ Cliente dado de baja');
+  } catch (e) { alert('No se pudo: ' + e.message); }
+}
+
+// ─── Apuntar lo que trae ──────────────────────────────────────
+let COBRANDO = null;
+
+async function abrirCobrarVenta(ventaId) {
+  try { COBRANDO = await api('/api/ventas/' + ventaId); }
+  catch (e) { alert('No se pudo abrir esa venta: ' + e.message); return; }
+  const v = COBRANDO.venta;
+  $('cv-cabecera').innerHTML = esc(v.cliente || 'Sin cliente') + ' · venta del ' + esc(v.fecha) +
+    ' · total ' + dinero(v.total, v.moneda) +
+    (v.cobrado > 0.005 ? ' · ya pagó ' + dinero(v.cobrado, v.moneda) : '');
+  $('cv-falta').textContent = dinero(v.falta, v.moneda);
+  $('cv-importe').value = '';
+  $('cv-nota').value = '';
+  $('cv-aviso').innerHTML = '';
+  $('cv-sitio').innerHTML = SITIOS.map(x =>
+    `<option value="${x.id}"${x.id === v.sitio_id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('');
+  // Los pagos que ya trajo, para poder discutirlos con el cliente delante: «el
+  // martes trajiste mil» es una conversación que necesita la lista, no el total.
+  const hechos = (COBRANDO.cobros || []).filter(c => c.importe > 0 &&
+    !(COBRANDO.cobros || []).some(x => x.anula_a === c.id));
+  $('cv-apuntes').innerHTML = !hechos.length ? '' :
+    '<label class="lbl">Lo que ha ido trayendo</label>' + hechos.map(c => `
+      <div class="fila"><span class="pista">${esc(c.fecha)}${
+        c.persona ? ' · ' + esc(c.persona) : ''}</span>
+        <b class="num">${dinero(c.importe, c.moneda)}</b></div>`).join('');
+  $('velo-cobrar').classList.add('abierto');
+  setTimeout(() => $('cv-importe').focus(), 120);
+}
+function cerrarCobrarVenta() { $('velo-cobrar').classList.remove('abierto'); COBRANDO = null; }
+function cobrarloTodo() {
+  if (!COBRANDO) return;
+  $('cv-importe').value = COBRANDO.venta.falta;
+}
+
+async function guardarCobroVenta() {
+  if (!COBRANDO) return;
+  const importe = parseFloat($('cv-importe').value) || 0;
+  if (importe <= 0) { toast('⚠ Escribe cuánto trae'); $('cv-importe').focus(); return; }
+  try {
+    const r = await api('/api/ventas/' + COBRANDO.venta.id + '/cobrar', { method: 'POST',
+      body: JSON.stringify({ importe, sitio_id: $('cv-sitio').value,
+                             nota: $('cv-nota').value.trim() || null }) });
+    cerrarCobrarVenta();
+    toast(r.falta > 0.005 ? '✓ Apuntado · le faltan ' + dinero(r.falta, MONEDA)
+                          : '✓ Apuntado · esa venta queda saldada');
+    await cargarPorCobrar();
+    await cargarFondo();
+  } catch (e) {
+    $('cv-aviso').innerHTML = '<div class="aviso">' + esc(e.message) + '</div>';
+  }
 }
 
 // El período elegido en la pantalla del Fondo, para que el PDF salga con lo

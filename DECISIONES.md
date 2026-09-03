@@ -1613,6 +1613,157 @@ del pasado, no algo que la aplicación pueda crear hoy.
 
 ---
 
+## 43. Lo que se fía: el dinero entra por el COBRO, no por la venta
+
+Pedido por el dueño el **3 de septiembre de 2026**: «poder crear ventas y
+enlazarlas a clientes de forma opcional; a veces el cliente obtiene la mercancía
+pero queda una cuenta por pagar y la paga luego, a veces la paga de forma
+completa o a veces va pagando poco a poco, y necesito saber de lo que pagué
+cuánto le va faltando por pagar. Necesito que en esas ventas a clientes se pueda
+ir cambiando de estados a pendiente de cobro, o ya cobrada».
+
+### Una venta, y el dinero llega cuando llega
+
+No hay dos clases de venta. **Una venta de mostrador es una venta con UN cobro
+por su total, hecho en el mismo momento**; una fiada es la misma venta sin cobro
+todavía, o con cobros más pequeños según vaya pagando. Partirlas en dos tipos
+habría dejado dos caminos que hacen casi lo mismo, y el día que se cambie uno se
+olvidará el otro.
+
+**Lo cobrado no se guarda: se suma.** Es la regla del stock (#1) aplicada al
+dinero. Una columna `pagado` que se va editando serían dos verdades sobre lo
+mismo —la columna y la lista de cobros— y el día que no coincidan no habría forma
+de saber cuál miente. Lo mismo con el **estado**: `pendiente`, `parcial` y
+`cobrada` se leen de la resta, no se guardan ni se cambian a mano. Un estado
+guardado acabaría diciendo «cobrada» de una venta que nadie pagó.
+
+### El fallo que esto habría dejado todas las noches
+
+Hasta hoy el dinero entraba en la caja **al vender**. Con lo fiado, eso habría
+dejado el cuadre de la jornada esperando un efectivo que nadie ha traído: **un
+descuadre falso cada noche**, en la única cifra que existe precisamente para
+avisar de que falta dinero.
+
+Así que **el efectivo del día sale de los COBROS y no de las ventas**. Son dos
+cosas distintas desde hoy: lo que se fía hoy no está en la gaveta esta noche, y
+lo que se cobra hoy de una venta de la semana pasada sí. En la pantalla del día
+se enseñan las dos, y **lo fiado de hoy aparte**, que es exactamente la diferencia
+entre lo vendido y lo cobrado.
+
+**La ganancia, en cambio, cuenta al vender**, y no cambia. La mercancía salió del
+estante: si la ganancia esperara al cobro, un mes bueno parecería malo por culpa
+de un cliente lento. **Y la comisión también se gana al vender**, preguntado y
+confirmado por el dueño. Tiene su riesgo y conviene decirlo en voz alta: si un
+cliente no paga nunca, esa comisión ya se pagó.
+
+### Una deuda sin cliente no se le puede cobrar a nadie
+
+Por eso el cliente es una **ficha** y no un nombre escrito a mano en cada venta.
+Escrito a mano, «Juan», «Juan P.» y «juan perez» son tres deudas de la misma
+persona, y «¿cuánto me debe Juan?» deja de tener respuesta.
+
+Y por eso **el servidor se niega a fiar sin cliente**. No avisa: se para. Una
+venta fiada sin cliente es dinero que dentro de un mes está perdido y ni siquiera
+se sabe de quién era. La pantalla lo dice antes, mientras se cobra, para que
+nadie llegue al cartel del servidor con el cliente delante.
+
+**Tampoco se da de baja a un cliente que debe algo.** Sería esconder una deuda en
+vez de cobrarla.
+
+### Anular devuelve lo COBRADO, no el total
+
+Es el error que habría dejado la gaveta con menos dinero del que tiene: de una
+venta fiada que nadie ha pagado **no hay nada que sacar de la caja**. Se devuelve
+lo que entró, ni un peso más, y los cobros se deshacen uno por uno con su
+contrario para que la venta no arrastre la deuda de algo que ya no existe.
+
+Un cobro mal apuntado se deshace igual: con su contrario y con la fecha de **hoy**,
+no con la del cobro, porque corregir hoy no puede mover el dinero de una jornada
+ya cerrada (misma regla que la #31).
+
+### Lo que se toca y lo que no
+
+Una tabla `clientes`, una tabla `cobros`, y una columna `cliente_id` en `ventas`.
+Nada más. Las dos tablas viajan en la sincronización (#11): los clientes como los
+productos —gana el más reciente— y los cobros como apuntes, que nacen y no cambian.
+
+**La migración da por cobrada entera cada venta de antes**, con **su** fecha y
+**su** momento. Con la fecha del despliegue, el efectivo de todos los días
+anteriores se mudaría al día del cambio y no volvería a cuadrar ni un cierre ya
+cerrado. Y no apunta nada en el fondo: el ingreso de esas ventas ya está escrito
+desde el día que se hicieron; lo que faltaba era el cobro que lo explica.
+
+`pruebas/creditos.js` (nuevo, **51 comprobaciones**). Las que importan son las
+que miran por el otro lado: que lo fiado **no** meta un peso en ninguna caja, que
+el cuadre de la noche **no** lo espere, y que anular devuelva lo cobrado y no el
+total.
+
+---
+
+## 44. Cajas y sacos: se escribe en bultos y se guarda en unidades
+
+Pedido por el dueño el **3 de septiembre de 2026**: «en el almacén principal tengo
+productos por cantidades en cajas o sacos, y cuando paso a otro de mis almacenes
+necesito poder pasar esos productos convertidos a unidades».
+
+### Por dentro TODO son unidades, siempre
+
+La caja es **una forma de escribir la cantidad y de leerla**, nunca un dato
+guardado. Se escribe «3 cajas» y se guardan 72 unidades; el estante se lee «240 (10
+cajas)» y lo guardado son 240.
+
+La otra forma —el almacén guardando cajas y la tienda unidades— se descartó, y no
+por gusto: sería que **el mismo número significara dos cosas según dónde se mire**.
+Con eso, el valor del inventario suma peras con manzanas, el mínimo de existencia
+avisa cuando no toca, y un traslado de 3 tiene que decidir si saca 3 o 72. Es
+exactamente la clase de dato con dos dueños que la #3 existe para no tener.
+
+Se eligió con el dueño delante, entre las dos opciones dibujadas.
+
+### La cuenta la hace el SERVIDOR
+
+Va en **una sola función**, `cantidadEnUnidades()`, y por ella pasan los tres
+caminos que mueven mercancía a mano: la entrada o merma del almacén, el despacho y
+la recepción. La misma multiplicación escrita tres veces son tres reglas que un
+día dejan de coincidir.
+
+Y la hace el servidor, no la pantalla (#10). Si la hiciera la pantalla, un
+dispositivo con el `app.js` viejo en su caché mandaría «3» queriendo decir tres
+cajas y entrarían **tres unidades**: mercancía de menos, y sin que nadie lo notara
+hasta contar el estante. Por eso lo que viaja es la cantidad tal como se escribió
+y **en qué medida está escrita**, y no viajar la medida significa unidades, que es
+lo que hacían todos los dispositivos hasta hoy.
+
+### Un producto sin bulto puesto SE NIEGA
+
+Si alguien escribe «3 cajas» de algo que no tiene dicho cuántas unidades trae una
+caja, la aplicación **no guarda 3**: se para y dice dónde ponerlo. Dar por bueno el
+número tal cual sería meter mercancía de menos por un camino silencioso.
+
+### Cambiar el tamaño de la caja no reescribe nada
+
+Y esta es la ventaja de que lo guardado sean unidades: corregir «una caja trae 24»
+por «trae 12» **no toca ni un movimiento**, porque no hay nada que tocar. Lo único
+que cambia es cómo se escriben y cómo se leen las cantidades a partir de ese
+momento. Por eso también el historial se enseña **en unidades** y no en cajas: una
+cifra vieja leída con el factor de hoy diría otra cosa que el día que se escribió.
+
+### Dónde se puede escribir en bultos, y dónde no
+
+Se puede en la **entrada y la merma** del almacén, en el **despacho** y en la
+**recepción** —que es donde el dueño cuenta bultos de verdad—. **La caja de venta y
+las inversiones siguen en unidades**: no se pidieron, y la caja además tiene un
+precio por unidad que habría que decidir aparte.
+
+`pruebas/bultos.js` (nuevo, **22 comprobaciones**). Las que importan son las que
+miran lo que se rompería sin darse cuenta: que **no** mandar la medida siga
+guardando unidades —o al desplegar esto todas las entradas se multiplicarían por
+24—, que el freno de «no se rebaja lo que no está» (#40) cuente en unidades, y que
+la pantalla **no** multiplique por su cuenta antes de mandar, que sería multiplicar
+dos veces.
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía
