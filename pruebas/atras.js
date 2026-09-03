@@ -61,12 +61,21 @@ function montar() {
   // —que pasado el rato vuelva a hacer falta avisar— sin esperar de verdad.
   let reloj = 1e12;
   let alPop = null;
+  const alToque = [];
   const win = {
     history: {
       pushState: () => { registro.empujones++; },
       back: () => { registro.atras++; }
     },
-    addEventListener: (que, fn) => { if (que === 'popstate') alPop = fn; },
+    addEventListener: (que, fn) => {
+      if (que === 'popstate') alPop = fn;
+      // Los toques en la pantalla: son los que ponen la red (ver abajo).
+      if (que === 'pointerdown' || que === 'keydown') alToque.push(fn);
+    },
+    removeEventListener: (que, fn) => {
+      const i = alToque.indexOf(fn);
+      if (i >= 0) alToque.splice(i, 1);
+    },
     setTimeout: fn => fn(),        // el aplazamiento no cambia lo que se prueba
     Date: { now: () => reloj },
     // Las funciones que cierran cada ventana, tal y como viven en el navegador:
@@ -88,22 +97,41 @@ function montar() {
     abrir: (...vs) => { abiertas.length = 0; vs.forEach(v => abiertas.push(v)); },
     velo,
     pulsarAtras: () => alPop({}),
+    tocarPantalla: () => [...alToque].forEach(f => f()),
+    escuchasDeToque: () => alToque.length,
     hayHandler: () => typeof alPop === 'function',
     envejecer: ms => { reloj += ms; }
   };
 }
 
-console.log('\n=== La red se pone sola al arrancar ===');
+console.log('\n=== La red se pone al PRIMER TOQUE, no al cargar ===');
+// Y esto no es un capricho: Chrome se defiende de las páginas que secuestran el
+// botón «atrás» y SE SALTA las entradas de historial creadas sin que nadie haya
+// tocado nada. Puesta al cargar, la red no servía de nada —el primer «atrás»
+// pasaba por encima y cerraba la aplicación, sin que llegara a salir el aviso—.
+// Lo contó el dueño el 3 de septiembre de 2026: «cuando doy atrás no sale cartel
+// de dos toques, sino que sale directamente de la aplicación».
 {
   const n = montar();
   comp('hay alguien escuchando el «atrás»', n.hayHandler());
-  comp('y se deja una entrada de historia de sobra puesta',
+  comp('al cargar NO se empuja nada: esa entrada Chrome se la salta',
+    n.registro.empujones === 0, n.registro.empujones);
+  n.tocarPantalla();
+  comp('y al primer toque en la pantalla sí se deja la entrada de sobra',
+    n.registro.empujones === 1, n.registro.empujones);
+  // Si el escucha se quedara puesto, cada toque empujaría una entrada más y
+  // harían falta cuarenta «atrás» para salir de la aplicación.
+  comp('el escucha se quita solo: no se empuja una entrada en cada toque',
+    n.escuchasDeToque() === 0, n.escuchasDeToque());
+  n.tocarPantalla();
+  comp('y por eso tocar otras diez veces no añade ninguna',
     n.registro.empujones === 1, n.registro.empujones);
 }
 
 console.log('\n=== Con una ventana abierta, «atrás» la cierra y nadie sale ===');
 {
   const n = montar();
+  n.tocarPantalla();   // la red se pone al primer toque
   n.abrir(n.velo('velo-ficha', 'cerrarFicha'));
   n.pulsarAtras();
   comp('se cierra llamando a SU función, no quitando la clase',
@@ -120,6 +148,7 @@ console.log('\n=== La cámara del escáner se apaga, que es de lo que se trata =
 // quedaría encendida detrás, comiéndose la batería y con la luz dada.
 {
   const n = montar();
+  n.tocarPantalla();   // la red se pone al primer toque
   n.abrir(n.velo('velo-escaner', 'cerrarEscaner'));
   n.pulsarAtras();
   comp('se llama a cerrarEscaner(), que apaga la cámara',
@@ -132,6 +161,7 @@ console.log('\n=== Con dos ventanas, se cierra la de encima ===');
 // del HTML. Pasa de verdad: «crear producto» se abre sobre la de una entrada.
 {
   const n = montar();
+  n.tocarPantalla();   // la red se pone al primer toque
   n.abrir(n.velo('velo-mov', 'cerrarFicha'), n.velo('velo-nuevoprod', 'cerrarEscaner'));
   n.pulsarAtras();
   comp('la última del HTML es la que se cierra',
@@ -142,6 +172,7 @@ console.log('\n=== Con dos ventanas, se cierra la de encima ===');
 console.log('\n=== Sin ventanas: hacen falta DOS toques ===');
 {
   const n = montar();
+  n.tocarPantalla();   // la red se pone al primer toque
   n.pulsarAtras();
   comp('el primer toque avisa', n.registro.avisos.length === 1, JSON.stringify(n.registro.avisos));
   comp('y el aviso dice qué hacer, no solo que pasa algo',
@@ -160,6 +191,7 @@ console.log('\n=== Pasados los dos segundos, se olvida ===');
 // Quien se distrajo y vuelve al rato no puede salirse de un solo toque.
 {
   const n = montar();
+  n.tocarPantalla();   // la red se pone al primer toque
   n.pulsarAtras();
   n.envejecer(5000);
   n.pulsarAtras();

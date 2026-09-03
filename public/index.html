@@ -971,14 +971,26 @@
 
     <div class="dosCol">
       <div>
-        <label class="lbl">Se cuenta y se vende por…</label>
-        <input type="text" id="f-um" placeholder="Unidad" list="lista-um"
-               oninput="pistaDelBulto()">
-        <datalist id="lista-um">
-          <option>Unidad</option><option>Libra</option><option>Kilogramo</option>
-          <option>Metro</option><option>Litro</option><option>Galón</option>
-          <option>Rollo</option><option>Juego</option><option>Par</option>
-        </datalist>
+        <!-- UNA LISTA DE VERDAD, no una casilla con sugerencias. Una casilla con
+             «list» se comporta distinto en cada teléfono: en el del dueño parecía
+             fija y no había manera de cambiarla. Un desplegable se toca y se
+             elige, y funciona igual en todos. La casilla de escribir sigue ahí,
+             escondida, para lo que no esté en la lista. -->
+        <label class="lbl">¿En qué se cuenta?</label>
+        <select id="f-um-sel" onchange="alElegirUnidad()">
+          <option value="Unidad">Unidades</option>
+          <option value="Libra">Libras</option>
+          <option value="Kilogramo">Kilogramos</option>
+          <option value="Metro">Metros</option>
+          <option value="Litro">Litros</option>
+          <option value="Galón">Galones</option>
+          <option value="Rollo">Rollos</option>
+          <option value="Juego">Juegos</option>
+          <option value="Par">Pares</option>
+          <option value="__otro">Otra… (escribirla)</option>
+        </select>
+        <input type="text" id="f-um" placeholder="Escribe la unidad"
+               style="display:none;margin-top:7px" oninput="pistaDelBulto()">
       </div>
       <div>
         <label class="lbl">Código del fabricante</label>
@@ -998,27 +1010,32 @@
          escribir «3 cajas» al despachar y para poder leer «240 (10 cajas)». -->
     <div class="pista" id="f-um-pista" style="margin-top:-4px">La existencia se cuenta en esto,
       y el precio de venta es el de <b>una</b> de estas. Si el saco de arroz lo vendes por
-      libras, escribe <b>Libra</b>.</div>
+      libras, elige <b>Libras</b>.</div>
 
     <label class="lbl">¿Viene en cajas, sacos o paquetes?</label>
-    <div class="dosCol">
-      <div>
-        <label class="lbl">El bulto se llama</label>
-        <input type="text" id="f-nombrecaja" placeholder="Caja" list="lista-bultos"
-               oninput="pistaDelBulto()">
-        <datalist id="lista-bultos">
-          <option>Caja</option><option>Saco</option><option>Paquete</option>
-          <option>Bulto</option><option>Bolsa</option><option>Quintal</option>
-          <option>Palet</option><option>Docena</option>
-        </datalist>
-      </div>
-      <div>
-        <label class="lbl" id="f-porcaja-lbl">Y trae dentro</label>
-        <input type="number" id="f-porcaja" placeholder="0" inputmode="decimal"
-               oninput="pistaDelBulto()">
-      </div>
+    <select id="f-caja-sel" onchange="alElegirBulto()">
+      <option value="">No, va suelto</option>
+      <option value="Caja">Sí, en cajas</option>
+      <option value="Saco">Sí, en sacos</option>
+      <option value="Paquete">Sí, en paquetes</option>
+      <option value="Bolsa">Sí, en bolsas</option>
+      <option value="Bulto">Sí, en bultos</option>
+      <option value="Quintal">Sí, en quintales</option>
+      <option value="Docena">Sí, en docenas</option>
+      <option value="Palet">Sí, en palets</option>
+      <option value="__otro">Sí, en otra cosa… (escribirla)</option>
+    </select>
+    <!-- Todo lo del bulto vive aquí dentro y solo sale si el producto viene en
+         bultos: preguntar «cuántas trae» de algo que va suelto es una casilla más
+         que no significa nada. -->
+    <div id="f-caja-caja" style="display:none">
+      <input type="text" id="f-nombrecaja" placeholder="Escribe cómo se llama"
+             style="display:none;margin-top:7px" oninput="pistaDelBulto()">
+      <label class="lbl" id="f-porcaja-lbl">Y trae dentro</label>
+      <input type="number" id="f-porcaja" placeholder="0" inputmode="decimal"
+             oninput="pistaDelBulto()">
     </div>
-    <div class="pista" id="f-bulto-pista">Déjalo en 0 si este producto no viene en bultos.</div>
+    <div class="pista" id="f-bulto-pista"></div>
 
     <!-- El costo se GUARDA siempre en pesos, aunque se compre en dólares: si
          cada producto llevara su moneda, el valor del almacén y el cuadre del

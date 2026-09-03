@@ -193,7 +193,37 @@ function cerrarVentana(velo) {
   velo.classList.remove('abierto');
 }
 
+// LA RED HAY QUE PONERLA DESPUÉS DE QUE LA PERSONA TOQUE LA PANTALLA, y esto es
+// lo que faltaba: puesta al cargar, no servía de nada.
+//
+// Chrome se defiende de las páginas que secuestran el botón «atrás» y SE SALTA
+// las entradas de historial creadas sin que nadie haya tocado nada. La nuestra se
+// creaba al arrancar la aplicación, así que era justo de las que se salta: el
+// primer toque en «atrás» pasaba por encima de ella y cerraba la aplicación, sin
+// llegar a salir el aviso. El dueño lo dijo tal cual el 3 de septiembre de 2026:
+// «cuando doy atrás no sale cartel de dos toques, sino que sale directamente».
+//
+// Con un toque cualquiera —abrir la caja, escribir, pulsar un botón— la entrada
+// ya vale, y a partir de ahí las que se ponen al cerrar una ventana también, que
+// esas nacen de un «atrás» y por tanto de un gesto.
+//
+// Se pone una sola vez y los escuchas se quitan solos: dejarlos puestos sería
+// empujar una entrada nueva en cada toque de la pantalla, y entonces harían falta
+// cuarenta «atrás» para salir.
+let redPuesta = false;
+function ponerRedAlPrimerToque() {
+  if (redPuesta) return;
+  redPuesta = true;
+  ponerRedDeAtras();
+  for (const ev of ['pointerdown', 'keydown']) window.removeEventListener(ev, ponerRedAlPrimerToque);
+}
+for (const ev of ['pointerdown', 'keydown'])
+  window.addEventListener(ev, ponerRedAlPrimerToque, { passive: true });
+
 window.addEventListener('popstate', () => {
+  // Si «atrás» llega antes de que nadie haya tocado la pantalla, la red no está
+  // puesta; se pone ahora, que este popstate ya es un gesto de la persona.
+  redPuesta = true;
   const velo = ventanaDeEncima();
   if (velo) { cerrarVentana(velo); ponerRedDeAtras(); return; }
   if (Date.now() - atrasArmado < 2000) {
@@ -206,7 +236,6 @@ window.addEventListener('popstate', () => {
   toast('Toca «atrás» otra vez para salir');
   ponerRedDeAtras();
 });
-ponerRedDeAtras();
 
 // ─── Lo que se carga al arrancar ──────────────────────────────
 // El catálogo entero, los sitios y las existencias. Ya no hay pantalla de
@@ -245,6 +274,55 @@ const enPlural = p => {
   return /[aeiouáéíóú]$/i.test(t) ? t + 's' : t + 'es';
 };
 
+// Elegir en la lista, o escribirlo. La casilla de texto es la que manda —es la
+// que se guarda—; el desplegable solo la rellena. Así el resto del código sigue
+// leyendo lo de siempre y no se entera de que ahora hay una lista.
+function alElegirUnidad() {
+  const sel = $('f-um-sel'), caja = $('f-um');
+  const otra = sel.value === '__otro';
+  caja.style.display = otra ? '' : 'none';
+  if (!otra) caja.value = sel.value;
+  else if (['Unidad', 'Libra', 'Kilogramo', 'Metro', 'Litro', 'Galón', 'Rollo',
+            'Juego', 'Par'].includes(caja.value)) caja.value = '';
+  if (otra) setTimeout(() => caja.focus(), 60);
+  pistaDelBulto();
+}
+
+function alElegirBulto() {
+  const sel = $('f-caja-sel'), caja = $('f-nombrecaja');
+  const otro = sel.value === '__otro';
+  const hay = !!sel.value;
+  $('f-caja-caja').style.display = hay ? 'block' : 'none';
+  caja.style.display = otro ? '' : 'none';
+  if (!hay) { caja.value = ''; $('f-porcaja').value = ''; }
+  else if (!otro) caja.value = sel.value;
+  else if (['Caja', 'Saco', 'Paquete', 'Bolsa', 'Bulto', 'Quintal', 'Docena',
+            'Palet'].includes(caja.value)) caja.value = '';
+  if (otro) setTimeout(() => caja.focus(), 60);
+  pistaDelBulto();
+}
+
+// Poner los dos desplegables en lo que tenga el producto. Si lo suyo no está en
+// la lista, se elige «otra cosa» y se enseña lo escrito.
+function ponerListasDelProducto(p) {
+  const um = (p && p.um) || 'Unidad';
+  const sel = $('f-um-sel');
+  $('f-um').value = um;
+  sel.value = [...sel.options].some(o => o.value === um) ? um : '__otro';
+  $('f-um').style.display = sel.value === '__otro' ? '' : 'none';
+
+  const bulto = (p && p.nombre_caja) || '';
+  const por = (p && p.unidades_por_caja) || 0;
+  const selB = $('f-caja-sel');
+  $('f-nombrecaja').value = bulto;
+  $('f-porcaja').value = por > 0 ? por : '';
+  selB.value = !por && !bulto ? ''
+    : ([...selB.options].some(o => o.value === bulto) && bulto ? bulto : '__otro');
+  $('f-caja-caja').style.display = selB.value ? 'block' : 'none';
+  $('f-nombrecaja').style.display = selB.value === '__otro' ? '' : 'none';
+  pistaDelBulto();
+}
+
 function pistaDelBulto() {
   const caja = $('f-bulto-pista');
   if (!caja) return;
@@ -258,13 +336,17 @@ function pistaDelBulto() {
     'Y trae dentro (' + enPlural(um) + ')';
   // «Cada caja» y no «un caja» / «una caja»: así no hay que acertar el género de
   // una palabra que escribe el dueño y que puede ser cualquiera.
-  caja.innerHTML = por > 0
-    ? 'Cada <b>' + esc(nombre) + '</b> trae <b>' + por + ' ' +
-      esc(por === 1 ? um : enPlural(um)) + '</b>. Al apuntar una entrada o un despacho ' +
-      'podrás escribir en ' + esc(enPlural(nombre)) + ', y la aplicación guarda ' +
-      'las ' + esc(enPlural(um)) + '. <b>La existencia siempre se cuenta en ' +
-      esc(enPlural(um)) + '.</b>'
-    : 'Déjalo en 0 si este producto no viene en bultos.';
+  const enBultos = $('f-caja-sel') && !!$('f-caja-sel').value;
+  caja.innerHTML = !enBultos
+    ? 'Se cuenta y se despacha en <b>' + esc(enPlural(um)) + '</b>.'
+    : (por > 0
+      ? 'Cada <b>' + esc(nombre) + '</b> trae <b>' + por + ' ' +
+        esc(por === 1 ? um : enPlural(um)) + '</b>. Al apuntar una entrada o un despacho ' +
+        'podrás escribir en ' + esc(enPlural(nombre)) + ', y la aplicación guarda ' +
+        'las ' + esc(enPlural(um)) + '. <b>La existencia siempre se cuenta en ' +
+        esc(enPlural(um)) + '.</b>'
+      : 'Escribe cuántas <b>' + esc(enPlural(um)) + '</b> trae cada <b>' +
+        esc(nombre) + '</b>.');
 }
 
 // ─── LEER UNA CANTIDAD EN BULTOS (DECISIONES.md #44) ─────────
@@ -414,7 +496,7 @@ function abrirFicha(id) {
   pintarFoto();
   $('f-nombre').value = p ? p.nombre : '';
   $('f-cat-in').value = p ? p.categoria : '';
-  $('f-um').value = p ? p.um : 'Unidad';
+  ponerListasDelProducto(p);
   $('f-codbarra').value = p ? (p.codigo_barra || '') : '';
   $('f-costo').value = p ? p.costo : '';
   $('f-costorepo').value = p && p.costo_repo > 0 ? p.costo_repo : '';
@@ -426,9 +508,7 @@ function abrirFicha(id) {
   $('f-precio-moneda').value = p ? (p.precio_moneda || 'CUP') : 'CUP';
   equivalencia();
   $('f-stockmin').value = p ? p.stock_min : '';
-  $('f-porcaja').value = p && p.unidades_por_caja > 0 ? p.unidades_por_caja : '';
-  $('f-nombrecaja').value = p ? (p.nombre_caja || '') : '';
-  pistaDelBulto();
+  // (la unidad y el bulto los pone ponerListasDelProducto, más arriba)
 
   // La existencia inicial solo se pregunta al CREAR, y solo a quien puede mover
   // mercancía: apuntarla es registrar una entrada, y eso tiene su propio permiso.
