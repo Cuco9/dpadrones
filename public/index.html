@@ -1109,7 +1109,11 @@
          la cifra al guardarla, con el valor del dólar de hoy. -->
     <div class="dosCol">
       <div>
-        <label class="lbl">Costo (lo que pagaste)</label>
+        <!-- EL RÓTULO DICE POR QUÉ UNIDAD ES. Sin eso, quien compra sacos de cien
+             kilos escribe lo que pagó por el saco, la aplicación lo entiende por
+             kilo y el valor del almacén sale cien veces más grande. Pasó de
+             verdad el 4-sep-2026 (DECISIONES.md #50). -->
+        <label class="lbl" id="f-costo-lbl">Costo (lo que pagaste)</label>
         <input type="number" id="f-costo" placeholder="0" inputmode="decimal">
       </div>
       <div>
@@ -1120,6 +1124,10 @@
         </select>
       </div>
     </div>
+    <!-- Y se puede escribir por saco o por caja, como la cantidad (#44 y #49).
+         Solo sale si el producto viene en bultos. -->
+    <select id="f-costo-medida" style="display:none;margin-top:6px"
+            onchange="equivalenciaCosto()"></select>
     <div class="pista" id="f-costo-equiv"></div>
 
     <label class="lbl">Costo de reposición</label>
@@ -1130,7 +1138,7 @@
 
     <div class="dosCol">
       <div>
-        <label class="lbl">Precio de venta *</label>
+        <label class="lbl" id="f-precio-lbl">Precio de venta *</label>
         <input type="number" id="f-precio" placeholder="0" inputmode="decimal">
       </div>
       <div>
@@ -1141,6 +1149,8 @@
         </select>
       </div>
     </div>
+    <select id="f-precio-medida" style="display:none;margin-top:6px"
+            onchange="equivalencia()"></select>
     <div class="pista" id="f-equivale"></div>
     <label class="lbl">Alerta de stock bajo</label>
     <input type="number" id="f-stockmin" placeholder="0" inputmode="decimal">

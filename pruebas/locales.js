@@ -113,6 +113,24 @@ function reglasDeLaPantalla() {
     js.slice(desde, hasta) +
     '; return { veAqui, estaSuelto, productosAqui, productosDelApartado, productosDelAlmacen };');
 }
+// LA CUENTA DEL DINERO, sacada del propio app.js y ejecutada (DECISIONES.md #50).
+// El costo y el precio se guardan SIEMPRE por unidad; quien compra sacos escribe lo
+// que pagó por el saco, y esta es la función que lo pasa a por-kilo. Se ejecuta, no
+// se lee: una división mal puesta no se ve mirando el código.
+function cuentaDelDinero(porCaja, medida) {
+  const js = fs.readFileSync(path.join(raiz, 'public/app.js'), 'utf8');
+  const desde = js.indexOf('const enBultoElDinero = campo =>');
+  const ancla = js.indexOf('const porUnidad = (n, campo) =>');
+  if (desde < 0 || ancla < 0) throw new Error('no se encontró la cuenta del dinero en public/app.js');
+  const hasta = js.indexOf('};', ancla) + 2;
+  const campos = {
+    'f-porcaja': { value: String(porCaja), style: {} },
+    'f-costo-medida': { value: medida, style: { display: porCaja > 0 ? '' : 'none' } },
+  };
+  const $ = id => campos[id] || { value: '', style: {} };
+  return new Function('$', js.slice(desde, hasta) + '; return porUnidad;')($);
+}
+
 // Las reglas puestas a mirar desde un local concreto. 'alcance' es lo que estaría
 // elegido en el desplegable del Almacén: «sitio» o «todos».
 const HAZ_REGLAS = reglasDeLaPantalla();
@@ -369,6 +387,23 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     comp('sin bulto no se ofrece ninguna medida',
       conBulto.campos['f-existencia-medida'].style.display === 'none' &&
       conBulto.medidaDelStock() === 'unidad');
+
+    // Y EL DINERO TAMBIÉN SE ESCRIBE POR SACO (#50). Es la otra mitad de lo mismo:
+    // quien compra sacos de cien kilos sabe lo que le costó EL SACO, y esa cifra en
+    // una casilla que decía «Costo» a secas dejaba el valor del almacén cien veces
+    // más grande. Le pasó al dueño el 4-sep-2026 con 3 sacos de harina: 3 000 000
+    // de pesos en vez de 30 000.
+    comp('10 000 el saco de 100 se guardan como 100 por unidad',
+      cuentaDelDinero(100, 'caja')(10000, 'f-costo-medida') === 100,
+      cuentaDelDinero(100, 'caja')(10000, 'f-costo-medida'));
+    comp('y escrito por unidad se guarda tal cual',
+      cuentaDelDinero(100, 'unidad')(10000, 'f-costo-medida') === 10000);
+    comp('sin bulto no se divide por nada, pase lo que pase',
+      cuentaDelDinero(0, 'caja')(10000, 'f-costo-medida') === 10000);
+    // Un precio que no divide exacto no se redondea a lo bruto: lo que se guarda es
+    // la cuenta de verdad, y redondear aquí desviaría cada venta un poquito.
+    comp('un precio que no divide exacto se guarda con sus decimales',
+      cuentaDelDinero(24, 'caja')(1000, 'f-costo-medida') === 1000 / 24);
 
     // Y LA PREGUNTA VUELVE AL ASIGNARLE EL LOCAL a uno que nunca ha tenido nada.
     // Pasó de verdad: creando desde el mirador la casilla no sale —ahí no hay dónde

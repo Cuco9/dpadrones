@@ -2308,6 +2308,92 @@ peor forma de fallar.
 
 ---
 
+## 50. El dinero también dice por qué unidad es
+
+Traído por el dueño el **4 de septiembre de 2026**, con el caso delante: «registré
+saco de harina de 100 kilos, **son 300 kilos, o sea 3 sacos**; precio de costo por
+saco de 100 kilos **10 000** y precio de venta **15 000**. Hasta ahí todo bien.
+Ahora mira los datos que refleja en almacén».
+
+Lo que reflejaba:
+
+| Lo que enseñaba | Lo que él quería decir |
+|---|---|
+| `300 u.` | 300 **kilos** |
+| `costo 10 000 CUP` | 10 000 **por saco** |
+| **Valor del inventario: 3 000 000 CUP** | 30 000 |
+
+### Dos fallos, y los dos son de la aplicación
+
+**1. La casilla del dinero no decía por qué unidad era.** Decía «Costo (lo que
+pagaste)» y «Precio de venta», a secas. Quien compra sacos de cien kilos sabe lo
+que le costó **el saco**, y eso es lo que escribe. La aplicación lo guardaba **por
+kilo** y multiplicaba por trescientos. Cien veces más grande, sin que nada avisara.
+
+Es **exactamente el mismo fallo de la #49 con la cantidad** —«10» quería decir dos
+cosas—, pero en el dinero. La mitad que me dejé ese mismo día.
+
+**2. Las existencias salían en «u.» aunque el producto se contara en kilos.** «300
+u.» hace creer que son trescientas cosas: trescientos sacos, o trescientos algo. La
+unidad estaba guardada en el producto y la pantalla la ignoraba.
+
+### Cómo queda
+
+El rótulo se escribe solo con la unidad del producto: **«Costo por kilogramo»**,
+**«Precio de venta por kilogramo»**. Y debajo, cuando el producto viene en bultos,
+un desplegable: **«Lo escribo por kilogramo»** / **«Lo escribo por saco (de 100)»**,
+con la cuenta dicha en voz alta antes de guardar —**«10 000 CUP el saco = 100 CUP
+por kilogramo»**—.
+
+Las existencias salen con su unidad: **300 kilos**, no «300 u.». «Unidad» se sigue
+enseñando como «u.», que es lo que cabe y lo que se ha leído siempre. Y el costo de
+la fila del almacén lleva su unidad detrás: **«costo 100 CUP/kilogramo»**.
+
+### Lo que se guarda no cambia: siempre por unidad
+
+Y no es un detalle de estilo. **Por unidad es lo único que deja sumar el valor del
+almacén** —donde hay productos que van en sacos, en cajas y sueltos— y sacar la
+ganancia de una venta. Escribirlo por saco es una forma de teclear, nunca un dato
+guardado, igual que las cajas de la #44.
+
+**La división se hace en la pantalla, y no en el servidor como la cantidad (#44).**
+Es a propósito, y la diferencia importa: la cantidad viaja con su medida al lado y
+el servidor puede rehacer la cuenta; el precio viaja ya hecho, y el servidor no
+tiene forma de saber si ese número venía por saco o por kilo. Guardar esa diferencia
+sería un dato más que puede quedarse mal el día que alguien cambie el bulto.
+
+**Los rótulos y los dos desplegables se rehacen cada vez que se toca el bulto o la
+unidad**, porque las dos cosas se editan en esa misma ficha: elegir «saco de 100»
+tiene que cambiar al momento en qué se está escribiendo el dinero.
+
+### Y una decisión que es suya, no de la aplicación
+
+Nada de esto contesta a la pregunta de fondo: **¿la harina se vende por kilos o por
+sacos?**
+
+- Si se vende **por sacos**, la unidad del producto **es el saco** y no hace falta
+  bulto ninguno: 3 sacos son 3 unidades, el costo es 10 000 y el precio 15 000, y
+  el valor del almacén son 30 000. Limpio.
+- Si se vende **al kilo**, la unidad es el kilo y el saco es el bulto: eso es
+  justamente para lo que existe la #44, y ahora el dinero se puede escribir por
+  saco sin que la cuenta salga mal.
+
+El bulto existe para quien **compra por sacos y vende al kilo**. Poner bulto a algo
+que se compra y se vende por sacos es complicarse sin ganar nada.
+
+### La prueba
+
+`pruebas/locales.js` sube a **99 comprobaciones**: la cuenta del dinero se **saca
+del propio `app.js` y se ejecuta**, no se lee. Una división mal puesta no se ve
+mirando el código.
+
+**Y una lección de la sonda con la que se comprobó:** buscaba el producto por el
+principio del nombre, había dos que empezaban igual, y leyó el equivocado. **Dijo
+que el arreglo no funcionaba cuando sí funcionaba.** Una comprobación que busca por
+un nombre parecido miente igual que no comprobar nada.
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía

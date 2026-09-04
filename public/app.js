@@ -349,10 +349,11 @@ function pistaDelBulto() {
     'Y trae dentro (' + enPlural(um) + ')';
   // «Cada caja» y no «un caja» / «una caja»: así no hay que acertar el género de
   // una palabra que escribe el dueño y que puede ser cualquiera.
-  // El bulto acaba de cambiar, así que la medida en la que se escribe el stock
-  // inicial ya no es la misma: se rehace aquí, que es por donde pasan todos los
-  // caminos que lo tocan.
+  // El bulto acaba de cambiar, así que la medida en la que se escriben el stock
+  // inicial y el dinero ya no es la misma: se rehacen aquí, que es por donde pasan
+  // todos los caminos que lo tocan.
   ponerMedidaDelStock();
+  ponerMedidasDelDinero();
   const enBultos = $('f-caja-sel') && !!$('f-caja-sel').value;
   caja.innerHTML = !enBultos
     ? 'Se cuenta y se transfiere en <b>' + esc(enPlural(um)) + '</b>.'
@@ -794,7 +795,8 @@ function alPonerStockInicial() {
 async function guardarProducto() {
   const nombre = $('f-nombre').value.trim();
   if (!nombre) { toast('⚠ Ponle nombre al producto'); $('f-nombre').focus(); return; }
-  const precio = parseFloat($('f-precio').value) || 0;
+  // Por unidad SIEMPRE, aunque se haya escrito por saco (#50).
+  const precio = porUnidad(parseFloat($('f-precio').value) || 0, 'f-precio-medida');
   if (precio <= 0) { toast('⚠ Ponle precio de venta'); $('f-precio').focus(); return; }
   // Se mira ANTES de crear nada: si la cantidad está mal, se avisa con el
   // producto todavía sin crear y se arregla escribiéndola bien. Después ya no,
@@ -1193,10 +1195,20 @@ async function cargarStock() {
   } catch (e) { STOCK = {}; }
 }
 
+// «300 u.» de un producto que se cuenta en kilos no dice nada, y peor: hace creer
+// que son trescientas cosas. La unidad del producto sale en la propia cifra (#50).
 function pillStock(id) {
   const n = Number(STOCK[id] || 0);
   const clase = n <= 0 ? 'nada' : (n <= 5 ? 'poco' : '');
-  return `<span class="stockPill ${clase}">${n} u.</span>`;
+  return `<span class="stockPill ${clase}">${n} ${esc(unidadCorta(id, n))}</span>`;
+}
+// La unidad, corta y en plural cuando toca. «Unidad» se queda en «u.», que es lo
+// que cabe en una píldora y lo que se ha leído siempre.
+function unidadCorta(id, n) {
+  const p = PRODUCTOS.find(x => x.id === id);
+  const um = (p && p.um) || 'Unidad';
+  if (um.toLowerCase() === 'unidad') return 'u.';
+  return (n === 1 ? um : enPlural(um)).toLowerCase();
 }
 
 // Sin escribir nada, la caja enseña lo que hay disponible para tocarlo y
@@ -2694,12 +2706,14 @@ function renderAlmacen() {
       <span class="cod">${esc(p.codigo)}</span>
       <div class="info"><div class="nm">${esc(p.nombre)}</div>
         <div class="sub">${todos ? (reparto || 'Sin existencia en ningún sitio')
-          : esc(p.categoria || 'Sin categoría') + ' · costo ' + enBase(p.costo)}${
+          : esc(p.categoria || 'Sin categoría') + ' · costo ' + enBase(p.costo) +
+            (p.um && p.um !== 'Unidad' ? '/' + esc(p.um.toLowerCase()) : '')}${
           // Lo mismo contado en bultos (#44). Es la cifra con la que se cuenta el
           // estante en el almacén principal: «240» no se cuenta, «10 cajas» sí.
           enBultos(p, n) ? ' · ' + esc(enBultos(p, n)) : ''}</div></div>
       <div class="pre">${todos
-        ? '<b>' + n + '</b><span>' + enBase(n > 0 ? n * (p.costo || 0) : 0) + '</span>'
+        ? '<b>' + n + ' ' + esc(unidadCorta(p.id, n)) + '</b><span>' +
+          enBase(n > 0 ? n * (p.costo || 0) : 0) + '</span>'
         : pillStock(p.id) + '<span>' + enBase(n > 0 ? n * (p.costo || 0) : 0) + '</span>'}</div>
       <span class="accIco editar" title="Tocar para editar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></span>
     </div>`;
@@ -5879,11 +5893,68 @@ async function eliminarSitio() {
 // como 36 000, el servidor lo leía como 36 000 dólares y la ganancia de cada
 // venta de ese producto salía absurda. Reportado el 14 de agosto de 2026.
 function costoEnBase(campo) {
-  const n = parseFloat($(campo).value) || 0;
+  const n = porUnidad(parseFloat($(campo).value) || 0, 'f-costo-medida');
   const m = $('f-costo-moneda').value === 'USD' ? 'USD' : 'CUP';
   if (!n || m === MONEDA_BASE) return n;
   const c = convertir(n, m, MONEDA_BASE);
   return c === null ? n : redondearBase(c);
+}
+
+// ─── EL DINERO ES SIEMPRE POR UNIDAD, PERO SE PUEDE ESCRIBIR POR BULTO ──────
+// DECISIONES.md #50. El costo y el precio se guardan por unidad, siempre: es lo
+// único que deja sumar el valor del almacén y calcular la ganancia de una venta.
+// Pero quien compra sacos de cien kilos sabe lo que le costó EL SACO, no el kilo,
+// y escribía esa cifra en una casilla que decía «Costo» a secas. El valor del
+// almacén salía cien veces más grande y no había forma de notarlo.
+//
+// Así que la casilla dice por qué unidad es, y deja escribirlo por saco. La
+// división se hace AQUÍ y no en el servidor —al revés que la cantidad (#44)—
+// porque lo que viaja es el precio ya hecho: el servidor no puede saber si el
+// número que le llega venía por saco o por kilo, y guardar esa diferencia sería
+// un dato más que puede quedarse mal.
+const enBultoElDinero = campo => {
+  const sel = $(campo);
+  return !!(sel && sel.style.display !== 'none' && sel.value === 'caja');
+};
+const porUnidad = (n, campo) => {
+  const por = parseFloat($('f-porcaja').value) || 0;
+  return (enBultoElDinero(campo) && por > 0) ? n / por : n;
+};
+
+// Los rótulos y los dos desplegables, rehechos cada vez que se toca el bulto o la
+// unidad: las dos cosas se editan en esta MISMA ficha.
+function ponerMedidasDelDinero() {
+  const por = parseFloat($('f-porcaja').value) || 0;
+  const nombre = $('f-nombrecaja').value.trim() || 'Caja';
+  const um = $('f-um').value.trim() || 'Unidad';
+  const unaUnidad = um.toLowerCase() === 'unidad' ? 'unidad' : um.toLowerCase();
+  if ($('f-costo-lbl')) $('f-costo-lbl').textContent = 'Costo por ' + unaUnidad;
+  if ($('f-precio-lbl')) $('f-precio-lbl').textContent = 'Precio de venta por ' + unaUnidad + ' *';
+  for (const campo of ['f-costo-medida', 'f-precio-medida']) {
+    const sel = $(campo);
+    if (!sel) continue;
+    const antes = sel.value;
+    sel.style.display = por > 0 ? '' : 'none';
+    sel.innerHTML = por <= 0 ? '' :
+      '<option value="unidad">Lo escribo por ' + esc(unaUnidad) + '</option>' +
+      '<option value="caja">Lo escribo por ' + esc(nombre.toLowerCase()) +
+        ' (de ' + por + ')</option>';
+    sel.value = (por > 0 && antes === 'caja') ? 'caja' : 'unidad';
+  }
+  equivalenciaCosto();
+  equivalencia();
+}
+
+// Lo que se va a guardar, dicho antes de guardarlo: «10 000 por saco = 100 por
+// kilo». Es la misma línea que salva la cantidad, aplicada al dinero.
+function porBultoDicho(valorCampo, medidaCampo) {
+  const n = parseFloat($(valorCampo).value) || 0;
+  const por = parseFloat($('f-porcaja').value) || 0;
+  if (!n || !enBultoElDinero(medidaCampo) || por <= 0) return '';
+  const um = ($('f-um').value.trim() || 'unidad').toLowerCase();
+  const nombre = ($('f-nombrecaja').value.trim() || 'caja').toLowerCase();
+  return '<b>' + dinero(n, MONEDA_BASE) + ' el ' + esc(nombre) + ' = ' +
+    dinero(Math.round((n / por) * 100) / 100, MONEDA_BASE) + ' por ' + esc(um) + '</b><br>';
 }
 // La comisión fija del producto, pasada a la moneda del negocio. Mismo camino que
 // el costo: se puede escribir en la moneda que se quiera y se guarda en una sola,
@@ -5944,10 +6015,11 @@ function equivalenciaCosto() {
   const r = parseFloat($('f-costorepo').value) || 0;
   const nombre = MONEDA_BASE === 'USD' ? 'dólares' : 'pesos';
   const otro = MONEDA_BASE === 'USD' ? 'pesos' : 'dólares';
+  const porBulto = porBultoDicho('f-costo', 'f-costo-medida');
   if (m === MONEDA_BASE) {
-    $('f-costo-equiv').textContent = 'El negocio se mide en ' + nombre + ', así que el costo ' +
-      'se guarda tal cual. Si lo compraste en ' + otro + ', cambia la casilla de al lado y ' +
-      'escribe esa cifra: la app hace la cuenta.';
+    $('f-costo-equiv').innerHTML = porBulto + 'El negocio se mide en ' + nombre + ', así que ' +
+      'el costo se guarda tal cual. Si lo compraste en ' + otro + ', cambia la casilla de al ' +
+      'lado y escribe esa cifra: la app hace la cuenta.';
     return;
   }
   const c = convertir(n, m, MONEDA_BASE);
@@ -5966,14 +6038,15 @@ function equivalenciaCosto() {
 // Enseña el precio en la otra moneda mientras se escribe, para que nadie tenga
 // que fiarse de una cuenta mental delante del cliente.
 function equivalencia() {
-  const n = parseFloat($('f-precio').value) || 0;
+  const n = porUnidad(parseFloat($('f-precio').value) || 0, 'f-precio-medida');
   const m = $('f-precio-moneda').value;
   const otra = m === 'USD' ? 'CUP' : 'USD';
   const c = convertir(n, m, otra);
-  $('f-equivale').innerHTML = !n ? ''
+  const porBulto = porBultoDicho('f-precio', 'f-precio-medida');
+  $('f-equivale').innerHTML = porBulto + (!n ? ''
     : c === null ? 'Pon el valor del dólar en Ajustes para ver el precio en ' + otra + '.'
     : 'Cobrando en ' + otra + ' serían <b>' + dinero(otra === 'USD' ?
-        Math.round(c * 100) / 100 : Math.round(c), otra) + '</b>.';
+        Math.round(c * 100) / 100 : Math.round(c), otra) + '</b>.');
 }
 
 async function guardarSinStock() {

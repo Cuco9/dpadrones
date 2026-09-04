@@ -790,10 +790,33 @@ comp('la cantidad se puede escribir en sacos o cajas, no solo en unidades',
   /function ponerMedidaDelStock\(\)/.test(js) &&
   /medida: medida \|\| 'unidad'/.test(js));
 comp('la lista de medidas se rehace al tocar el bulto, que se edita en la misma ficha',
-  /ponerMedidaDelStock\(\);\s*\n\s*const enBultos = /.test(js));
+  /ponerMedidaDelStock\(\);\s*ponerMedidasDelDinero\(\);/.test(js));
 comp('y se dice en voz alta lo que se va a guardar antes de guardarlo',
   /function alPonerStockInicial\(\)/.test(js) &&
   /id="f-existencia-cuenta"/.test(html));
+
+// EL DINERO DICE POR QUÉ UNIDAD ES (DECISIONES.md #50). Le pasó al dueño el
+// 4-sep-2026: registró 3 sacos de harina de cien kilos a 10 000 el saco y el
+// almacén le dijo 3 000 000 de pesos, porque esa cifra se entendía por kilo. La
+// casilla decía «Costo» a secas y no había forma de notarlo.
+comp('el costo y el precio dicen por qué unidad son',
+  /\$\('f-costo-lbl'\)\.textContent = 'Costo por ' \+ unaUnidad/.test(js) &&
+  /\$\('f-precio-lbl'\)\.textContent = 'Precio de venta por ' \+ unaUnidad/.test(js) &&
+  /id="f-costo-lbl"/.test(html) && /id="f-precio-lbl"/.test(html));
+comp('y se pueden escribir por saco, como la cantidad',
+  /id="f-costo-medida"/.test(html) && /id="f-precio-medida"/.test(html) &&
+  /function ponerMedidasDelDinero\(\)/.test(js));
+// Lo que se guarda es SIEMPRE por unidad: es lo único que deja sumar el valor del
+// almacén y sacar la ganancia de una venta.
+comp('pero lo que se guarda es siempre por unidad',
+  /const precio = porUnidad\(parseFloat\(\$\('f-precio'\)\.value\) \|\| 0, 'f-precio-medida'\)/.test(js) &&
+  /const n = porUnidad\(parseFloat\(\$\(campo\)\.value\) \|\| 0, 'f-costo-medida'\)/.test(js));
+comp('y se dice la cuenta antes de guardarla',
+  /function porBultoDicho\(/.test(js));
+// «300 u.» de algo que se cuenta en kilos hace creer que son trescientas cosas.
+comp('las existencias salen con la unidad del producto, no con «u.» siempre',
+  /function unidadCorta\(id, n\)/.test(js) &&
+  /\$\{n\} \$\{esc\(unidadCorta\(id, n\)\)\}/.test(js));
 // El cuerpo que viaja a /api/productos es el que no puede llevarla: guardarla
 // ahí sería el campo «este punto tiene 47 unidades» que la #1 prohíbe.
 comp('NO viaja dentro del producto: el stock se sigue calculando',
