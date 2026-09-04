@@ -2381,6 +2381,25 @@ sacos?**
 El bulto existe para quien **compra por sacos y vende al kilo**. Poner bulto a algo
 que se compra y se vende por sacos es complicarse sin ganar nada.
 
+### Y lo que ya estaba guardado mal no se arregla solo
+
+Esto costó una vuelta de más. El arreglo cambia **cómo se escribe** una cifra nueva;
+lo que ya estaba dentro sigue como estaba. El producto del dueño se había creado
+antes, con 10 000 metidos en la casilla del kilo, y después del despliegue seguía
+diciendo diez millones —correctamente: mil kilos a diez mil pesos son diez
+millones—. Él lo leyó como «el mismo problema otra vez», y tenía razón en lo que
+veía.
+
+**Un arreglo que solo vale para lo nuevo hay que decirlo al entregarlo**, y decir
+qué hay que tocar. No basta con arreglar el camino.
+
+Y por eso la ficha dice ahora **siempre** lo que sale el bulto entero, aunque se
+esté escribiendo por unidad: **«Un saco de 100 kilogramos sale en 1 000 000 CUP»**.
+Con esa línea delante, una cifra metida por saco en la casilla del kilo salta a la
+vista **al abrir el producto**, sin tener que ir al almacén a descubrirla por el
+valor del inventario. Es la comprobación que le faltaba a la #50 el día que se
+escribió.
+
 ### La prueba
 
 `pruebas/locales.js` sube a **99 comprobaciones**: la cuenta del dinero se **saca

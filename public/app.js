@@ -1743,10 +1743,16 @@ function pintarFormaCobro() {
 function abrirCobro() {
   if (!CARRO.length) return;
   $('cobro-total').textContent = dinero(totalCarro(), MONEDA);
-  const uds = CARRO.reduce((s, l) => s + l.cantidad, 0);
+  // Cuántos productos y cuánta mercancía. Se cuenta EN UNIDADES —un saco son cien
+  // kilos (#51)— y solo se dice la palabra cuando todas las líneas se cuentan en lo
+  // mismo: sumar kilos con botellas y llamarlo «unidades» es un número que no
+  // significa nada.
+  const uds = CARRO.reduce((s, l) => s + udsDeLinea(l), 0);
+  const ums = [...new Set(CARRO.map(l =>
+    (l.um && l.um !== 'Unidad') ? l.um.toLowerCase() : 'unidad'))];
   $('cobro-detalle').textContent =
-    CARRO.length + (CARRO.length === 1 ? ' producto' : ' productos') + ', ' +
-    uds + (uds === 1 ? ' unidad' : ' unidades');
+    CARRO.length + (CARRO.length === 1 ? ' producto' : ' productos') +
+    (ums.length === 1 ? ', ' + uds + ' ' + (uds === 1 ? ums[0] : enPlural(ums[0])) : '');
   pintarSelectorClientes();
   $('cobro-cliente').value = '';
   $('cobro-entrega').value = '';
@@ -6013,11 +6019,18 @@ function ponerMedidasDelDinero() {
 function porBultoDicho(valorCampo, medidaCampo) {
   const n = parseFloat($(valorCampo).value) || 0;
   const por = parseFloat($('f-porcaja').value) || 0;
-  if (!n || !enBultoElDinero(medidaCampo) || por <= 0) return '';
+  if (!n || por <= 0) return '';
   const um = ($('f-um').value.trim() || 'unidad').toLowerCase();
   const nombre = ($('f-nombrecaja').value.trim() || 'caja').toLowerCase();
-  return '<b>' + dinero(n, MONEDA_BASE) + ' el ' + esc(nombre) + ' = ' +
-    dinero(Math.round((n / por) * 100) / 100, MONEDA_BASE) + ' por ' + esc(um) + '</b><br>';
+  if (enBultoElDinero(medidaCampo))
+    return '<b>' + dinero(n, MONEDA_BASE) + ' el ' + esc(nombre) + ' = ' +
+      dinero(Math.round((n / por) * 100) / 100, MONEDA_BASE) + ' por ' + esc(um) + '</b><br>';
+  // Y AL REVÉS, escribiendo por unidad: cuánto sale el saco entero. Es la línea
+  // que hace saltar a la vista una cifra que se metió por saco en una casilla que
+  // es por unidad —«un saco te sale en 1 000 000»— sin tener que ir al almacén a
+  // descubrirlo con el valor del inventario (DECISIONES.md #50).
+  return '<b>Un ' + esc(nombre) + ' de ' + por + ' ' + esc(enPlural(um)) + ' sale en ' +
+    dinero(Math.round(n * por * 100) / 100, MONEDA_BASE) + '</b><br>';
 }
 // La comisión fija del producto, pasada a la moneda del negocio. Mismo camino que
 // el costo: se puede escribir en la moneda que se quiera y se guarda en una sola,
@@ -6092,10 +6105,12 @@ function equivalenciaCosto() {
     return;
   }
   const rc = convertir(r, m, MONEDA_BASE);
-  $('f-costo-equiv').innerHTML = !n ? 'Escríbelo en ' + otro + ' y se guardará en ' + nombre + '.'
+  // La cuenta del bulto va también aquí: si no, escribiendo en la otra moneda se
+  // pierde justo el aviso que hace saltar a la vista un costo metido por saco.
+  $('f-costo-equiv').innerHTML = porBulto + (!n ? 'Escríbelo en ' + otro + ' y se guardará en ' + nombre + '.'
     : 'Se guardará como <b>' + enBase(redondearBase(c)) + '</b>' +
       (r ? ' (y el de reposición, ' + enBase(redondearBase(rc)) + ')' : '') +
-      ', al dólar de hoy. Después ya no cambia: lo que costó, costó.';
+      ', al dólar de hoy. Después ya no cambia: lo que costó, costó.');
 }
 
 // Enseña el precio en la otra moneda mientras se escribe, para que nadie tenga
