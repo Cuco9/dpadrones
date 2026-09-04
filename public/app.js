@@ -714,6 +714,9 @@ function abrirFicha(id, copiar) {
   // Excepciones de precio: una fila por sitio
   const precios = {};
   (p && p.precios || []).forEach(x => { precios[x.sitio_id] = x.precio; });
+  // Y AQUÍ TAMBIÉN SE DICE POR QUÉ UNIDAD ES (#50 y #52). Es el mismo sitio donde
+  // se puede colar la cifra del saco: quien vende el saco a 15 000 en el almacén y
+  // al kilo en la tienda escribiría aquí otro precio de saco sin pensarlo.
   $('ficha-precios').innerHTML = sitiosReales().map(s => `
     <div class="sitioPrecio">
       <span class="nmS">${esc(s.nombre)}</span>
@@ -5999,6 +6002,14 @@ function ponerMedidasDelDinero() {
   const unaUnidad = um.toLowerCase() === 'unidad' ? 'unidad' : um.toLowerCase();
   if ($('f-costo-lbl')) $('f-costo-lbl').textContent = 'Costo por ' + unaUnidad;
   if ($('f-precio-lbl')) $('f-precio-lbl').textContent = 'Precio de venta por ' + unaUnidad + ' *';
+  // El precio de cada local es por la MISMA unidad, y ahí es donde se puede colar
+  // la cifra del saco: quien vende el saco entero en el almacén y al kilo en la
+  // tienda escribiría aquí otro precio de saco sin pensarlo (#52).
+  if ($('f-precios-lbl'))
+    $('f-precios-lbl').textContent = 'Precio distinto en algún sitio (por ' + unaUnidad + ')';
+  if ($('f-precios-pista'))
+    $('f-precios-pista').innerHTML = 'Es el precio de <b>un ' + esc(unaUnidad) + '</b> en ese ' +
+      'local. Déjalo vacío y ese sitio usa el precio general de arriba.';
   for (const campo of ['f-costo-medida', 'f-precio-medida']) {
     const sel = $(campo);
     if (!sel) continue;

@@ -814,6 +814,13 @@ comp('pero lo que se guarda es siempre por unidad',
 comp('y se dice la cuenta antes de guardarla',
   /function porBultoDicho\(/.test(js));
 // «300 u.» de algo que se cuenta en kilos hace creer que son trescientas cosas.
+// EL PRECIO DE CADA LOCAL TAMBIÉN DICE POR QUÉ UNIDAD ES (#52). Es el otro sitio
+// donde se puede colar la cifra del saco: quien vende el saco entero en el almacén
+// y al kilo en la tienda escribiría ahí otro precio de saco sin pensarlo.
+comp('el precio de cada local dice por qué unidad es',
+  /id="f-precios-lbl"/.test(html) && /id="f-precios-pista"/.test(html) &&
+  /'Precio distinto en algún sitio \(por ' \+ unaUnidad/.test(js));
+
 comp('las existencias salen con la unidad del producto, no con «u.» siempre',
   /function unidadCorta\(id, n\)/.test(js) &&
   /\$\{n\} \$\{esc\(unidadCorta\(id, n\)\)\}/.test(js));

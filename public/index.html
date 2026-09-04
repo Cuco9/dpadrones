@@ -1219,9 +1219,15 @@
     </div>
     <div class="pista" id="f-comision-pista"></div>
 
-    <label class="lbl">Precio distinto en algún sitio</label>
+    <!-- El precio de cada local vive AQUÍ, en el producto, y no en la
+         transferencia: es del local, no del envío. Si se pusiera al transferir,
+         cada envío sería una ocasión de cambiar el precio sin querer, y el mismo
+         producto acabaría con dos precios en la misma tienda según qué remesa se
+         estuviera vendiendo (DECISIONES.md #52). -->
+    <label class="lbl" id="f-precios-lbl">Precio distinto en algún sitio</label>
     <div id="ficha-precios"></div>
-    <div class="pista">Déjalo vacío y ese sitio usa el precio general.</div>
+    <div class="pista" id="f-precios-pista">Déjalo vacío y ese sitio usa el precio
+      general de arriba.</div>
 
     <!-- Duplicar (DECISIONES.md #45): abre otra ficha con todo lo de este dentro
          para crear uno parecido. No guarda nada: el producto nuevo no nace hasta

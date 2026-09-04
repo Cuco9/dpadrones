@@ -2488,6 +2488,55 @@ unidades— y que de lo que va suelto no se venden «cajas».
 
 ---
 
+## 52. El precio de cada local vive en el producto, no en la transferencia
+
+Preguntado por el dueño el **4 de septiembre de 2026**, con la aplicación ya
+funcionando: «cuando lo transfiero del almacén a la tienda, ¿cómo pondría el precio
+que va a tener en la tienda por kilo?».
+
+La respuesta es que **ahí no se pone**. Se pone una vez, en la ficha del producto,
+en **«Precio distinto en algún sitio»**, y vale desde ese momento para todo lo que
+se venda en ese local.
+
+### Por qué no va en la transferencia
+
+Porque **el precio es del local, no del envío**. Si se pusiera al transferir:
+
+- cada envío sería una ocasión de cambiar el precio sin querer;
+- el mismo producto acabaría con **dos precios en la misma tienda** según qué
+  remesa se estuviera vendiendo, y nadie sabría cuál rige —el estante no distingue
+  de qué envío vino cada kilo, porque la existencia es una suma (#1)—;
+- y para bajar el precio de algo que ya está en la tienda habría que inventarse una
+  transferencia de cero unidades.
+
+Poner el precio donde vive el producto lo deja en **un solo sitio**, que es la
+misma razón por la que la conversión de bultos vive en una sola función (#44).
+
+### Cómo queda su caso
+
+Un solo producto, «Harina», contado en kilos y con el saco como bulto:
+
+| Dónde | Precio | Se vende |
+|---|---|---|
+| **Precio de venta** (el general) | por kilo, el del almacén | por sacos (#51) |
+| **Precio distinto en algún sitio → Tienda** | por kilo, más alto | al kilo |
+
+La transferencia solo mueve **mercancía**. El precio ya está puesto, y la tienda
+cobra el suyo desde el primer kilo que le llega.
+
+### Y ahí también se dice por qué unidad es
+
+Es el último sitio donde se podía colar la cifra del saco, y es el más traicionero:
+quien vende el saco entero en el almacén y al kilo en la tienda tiene el número del
+saco en la cabeza cuando llega a esa casilla. Ahora el rótulo lo dice —**«Precio
+distinto en algún sitio (por kilogramo)»**— y debajo: «Es el precio de **un
+kilogramo** en ese local».
+
+Con esto se cierra la lista de la #50: **todos** los sitios donde se escribe una
+cantidad o un precio dicen en qué unidad se escriben.
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía
