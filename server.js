@@ -2335,8 +2335,15 @@ app.post('/api/ventas', exige('vender'), (req, res) => {
     for (const l of lineas) {
       const prod = db.prepare('SELECT * FROM productos WHERE id=? AND borrado_en IS NULL').get(l.producto_id);
       if (!prod) throw new Error('Un producto de la venta ya no existe');
-      const cant = Number(l.cantidad) || 0;
-      if (cant <= 0) throw new Error('Cantidad no válida');
+      // SE PUEDE VENDER EN SACOS O EN CAJAS (DECISIONES.md #51). Pasa por la MISMA
+      // función que las entradas, las mermas y los traslados (#44): la regla de
+      // «tres cajas son 3 × 24» escrita dos veces son dos reglas que un día dejan
+      // de coincidir. Lo que se guarda son unidades siempre, así que una venta de
+      // un saco rebaja los cien kilos del estante.
+      let cant;
+      try { cant = cantidadEnUnidades(prod, l.cantidad, l.medida); }
+      catch (e) { throw new Error(e.message); }
+      if (!(cant > 0)) throw new Error('Cantidad no válida');
       pedidos.push({ sitio_id: sitio, producto_id: prod.id, cantidad: cant,
                      nombre: prod.nombre, um: prod.um, prod, cant });
     }

@@ -44,10 +44,20 @@ let MONEDA_BASE = 'CUP';
 let VENDER_SIN_STOCK = false;
 
 // Lo que queda de un producto contando lo que ya está en el carro.
+// Lo que queda disponible de un producto, contando lo que ya está apartado en el
+// carro. TODO EN UNIDADES: una línea escrita en sacos aparta cien kilos, no uno
+// (DECISIONES.md #51). Contándola como uno se podían meter en el carro cien veces
+// más de lo que hay sin que nada avisara.
 function quedaEnCaja(id) {
-  const enCarro = (CARRO.find(l => l.producto_id === id) || {}).cantidad || 0;
-  return Number(STOCK[id] || 0) - enCarro;
+  const l = CARRO.find(x => x.producto_id === id);
+  return Number(STOCK[id] || 0) - (l ? udsDeLinea(l) : 0);
 }
+// Las unidades de una línea del carro. 'porCaja' se guarda EN LA LÍNEA y no se
+// busca en el catálogo: el carro vive en el teléfono y sobrevive a un cierre de la
+// aplicación, y si mañana alguien cambia «el saco trae 100» por «trae 50», una
+// venta a medio anotar cambiaría de cantidad sola.
+const udsDeLinea = l => l.medida === 'caja' && l.porCaja > 0
+  ? l.cantidad * l.porCaja : l.cantidad;
 let MONEDA = localStorage.getItem('dp_moneda') || 'CUP';   // en qué se cobra ahora
 
 // El dinero SIEMPRE se escribe con su moneda al lado. Un número suelto en una
@@ -1297,7 +1307,10 @@ function alCarro(id) {
     const pr = precioEnSitio(p);
     if (pr === null) { toast('⚠ Falta el valor del dólar en Ajustes'); return; }
     CARRO.push({ producto_id: id, nombre: p.nombre, codigo: p.codigo,
-                 um: p.um, precio: pr, cantidad: 1 });
+                 um: p.um, precio: pr, cantidad: 1,
+                 porCaja: Number(p.unidades_por_caja) || 0,
+                 nombreCaja: p.nombre_caja || 'Caja',
+                 medida: medidaPorDefecto(p) });
   }
   $('caja-busq').value = '';
   renderResultados();
@@ -1318,10 +1331,16 @@ function ponerCantidad(id, valor) {
   if (!l) return;
   const n = parseFloat(valor);
   let cant = isNaN(n) || n <= 0 ? 1 : n;
+  // El tope se compara EN UNIDADES: escribir «3» en sacos son trescientos kilos
+  // (#51). Comparando el número escrito se colaban tres sacos donde había medio.
+  const por = l.medida === 'caja' && l.porCaja > 0 ? l.porCaja : 1;
   const hay = Number(STOCK[id] || 0);
-  if (!VENDER_SIN_STOCK && cant > hay) {
-    toast('⚠ Solo hay ' + hay + ' de ' + l.nombre);
-    cant = Math.max(1, hay);
+  if (!VENDER_SIN_STOCK && cant * por > hay) {
+    const cabe = Math.floor(hay / por);
+    const um = l.medida === 'caja' ? enPlural(l.nombreCaja || 'caja').toLowerCase()
+             : enPlural((l.um && l.um !== 'Unidad') ? l.um : 'unidad').toLowerCase();
+    toast('⚠ Solo hay para ' + cabe + ' ' + um + ' de ' + l.nombre);
+    cant = Math.max(1, cabe);
   }
   l.cantidad = cant;
   renderCarro();
@@ -1332,8 +1351,32 @@ function quitarLinea(id) {
   renderCarro();
 }
 
+// El precio de la línea es POR UNIDAD (#50), así que el total se saca de las
+// unidades de verdad y no del número escrito: un saco son cien kilos.
 function totalCarro() {
-  return CARRO.reduce((s, l) => s + l.precio * l.cantidad, 0);
+  return CARRO.reduce((s, l) => s + l.precio * udsDeLinea(l), 0);
+}
+
+// EN UN ALMACÉN SE DESPACHA POR BULTOS; EN UNA TIENDA, AL DETALLE (#51). Es lo
+// que hace el dueño: del almacén salen sacos enteros y más baratos, y la tienda
+// vende al kilo y más caro. Así no hay que cambiar la medida en cada venta.
+//
+// Es solo lo que viene PUESTO: se cambia en la propia línea del carro con un
+// toque, porque un almacén también puede vender suelto algún día.
+function medidaPorDefecto(p) {
+  if (!(Number(p.unidades_por_caja) > 0)) return 'unidad';
+  const s = SITIOS.find(x => x.id === sitioActual());
+  return (s && s.tipo === 'almacen') ? 'caja' : 'unidad';
+}
+
+// Cambiar de unidades a sacos NO cambia el número escrito: «3» pasa a ser tres
+// sacos. Es lo que se espera al tocar el desplegable, y lo que se va a cobrar se
+// vuelve a decir debajo en el mismo momento.
+function medidaDeLinea(id, medida) {
+  const l = CARRO.find(x => x.producto_id === id);
+  if (!l) return;
+  l.medida = medida === 'caja' ? 'caja' : 'unidad';
+  renderCarro();
 }
 
 function renderCarro() {
@@ -1349,17 +1392,32 @@ function renderCarro() {
   }
   cont.innerHTML = CARRO.map(l => {
     const hay = Number(STOCK[l.producto_id] || 0);
-    const falta = l.cantidad > hay;
+    const uds = udsDeLinea(l);
+    const falta = uds > hay;
+    const um = (l.um && l.um !== 'Unidad') ? l.um.toLowerCase() : 'unidad';
+    // En sacos, lo que se va a cobrar se dice debajo: «1 saco = 100 kilos». Sin
+    // eso hay que fiarse de una multiplicación hecha de cabeza (#44).
+    const enSacos = l.medida === 'caja' && l.porCaja > 0;
     return `<div class="linea">
       <div class="nm">${esc(l.nombre)}
-        <small>${esc(l.codigo)} · ${dinero(l.precio, MONEDA)} c/u${falta ? ' · ⚠ solo hay ' + hay : ''}</small></div>
+        <small>${esc(l.codigo)} · ${dinero(l.precio, MONEDA)} por ${esc(um)}${
+          falta ? ' · ⚠ solo hay ' + hay + ' ' + esc(enPlural(um)) : ''}</small>
+        ${enSacos ? '<small><b>' + esc(bultosEscritos(
+            { nombre_caja: l.nombreCaja, unidades_por_caja: l.porCaja }, l.cantidad)) +
+            ' = ' + uds + ' ' + esc(enPlural(um)) + '</b></small>' : ''}
+        ${l.porCaja > 0 ? `<select class="medidaLinea"
+             onchange="medidaDeLinea('${l.producto_id}',this.value)">
+            <option value="unidad"${l.medida !== 'caja' ? ' selected' : ''}>Por ${esc(um)}</option>
+            <option value="caja"${l.medida === 'caja' ? ' selected' : ''}>Por ${
+              esc((l.nombreCaja || 'caja').toLowerCase())} (de ${l.porCaja})</option>
+          </select>` : ''}</div>
       <div class="cant">
         <button onclick="cambiarCantidad('${l.producto_id}',-1)">−</button>
         <input type="number" inputmode="decimal" value="${l.cantidad}"
                onchange="ponerCantidad('${l.producto_id}',this.value)">
         <button onclick="cambiarCantidad('${l.producto_id}',1)">+</button>
       </div>
-      <div class="imp">${dinero(l.precio * l.cantidad, MONEDA)}</div>
+      <div class="imp">${dinero(l.precio * uds, MONEDA)}</div>
       <button class="quitar" onclick="quitarLinea('${l.producto_id}')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
@@ -1727,7 +1785,12 @@ async function confirmarVenta() {
         // siendo una venta con su cobro, como todas.
         cobrado_ahora: entregaAhora(),
         fecha: new Date().toLocaleDateString('sv-SE'),   // AAAA-MM-DD del dispositivo
-        lineas: CARRO.map(l => ({ producto_id: l.producto_id, cantidad: l.cantidad }))
+        // La medida viaja con la línea y la cuenta la hace el SERVIDOR, como en
+        // las entradas y los traslados (#44 y #51): si la hiciera la pantalla, un
+        // teléfono con el código viejo mandaría «1» queriendo decir un saco y se
+        // vendería un kilo.
+        lineas: CARRO.map(l => ({ producto_id: l.producto_id, cantidad: l.cantidad,
+                                  medida: l.medida || 'unidad' }))
       })
     });
     CARRO = [];

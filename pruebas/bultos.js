@@ -166,6 +166,44 @@ const elProducto = async id => ((await pedir('/api/productos')).cuerpo.productos
     comp('y la cuenta del freno está en unidades, no en cajas',
       /2400/.test(deMas.cuerpo.error || ''), deMas.cuerpo.error);
 
+    console.log('\n=== Y SE VENDE POR CAJAS, no solo por unidades ===');
+    // Pedido por el dueño el 4 de septiembre de 2026 (DECISIONES.md #51): «desde el
+    // almacén vendo por sacos y si transfiero a la tienda es para vender por unidad
+    // pero a otro precio». La #44 dejó fuera la caja de venta a propósito porque
+    // nadie la había pedido; ya está pedida.
+    const antesVenta = (await stockDe(almacen))[lata];
+    const vCaja = await post('/api/ventas', { sitio_id: almacen, moneda: 'CUP',
+      lineas: [{ producto_id: lata, cantidad: 2, medida: 'caja' }] });
+    comp('se vende «2 cajas» sin decir cuántas unidades son', vCaja.status === 200,
+      vCaja.status + ' ' + JSON.stringify(vCaja.cuerpo).slice(0, 140));
+    comp('y del estante salen 48 unidades, no 2',
+      casi((await stockDe(almacen))[lata], antesVenta - 48),
+      (await stockDe(almacen))[lata] + ' antes ' + antesVenta);
+    // El precio es POR UNIDAD (#50), así que una caja son 24 × 150.
+    comp('se cobra la caja entera: 24 × 150 = 3 600 por caja',
+      casi(vCaja.cuerpo.total, 2 * 24 * 150), vCaja.cuerpo.total);
+
+    // Y sigue valiendo la de siempre, que es la inmensa mayoría de las ventas.
+    const vSuelta = await post('/api/ventas', { sitio_id: almacen, moneda: 'CUP',
+      lineas: [{ producto_id: lata, cantidad: 3 }] });
+    comp('sin decir la medida se venden unidades, como siempre',
+      vSuelta.status === 200 && casi(vSuelta.cuerpo.total, 3 * 150),
+      vSuelta.cuerpo.total);
+
+    // Lo que no está no se vende, y la cuenta se hace EN UNIDADES: dos cajas de un
+    // producto del que quedan diez unidades son cuarenta y ocho que no hay.
+    const quedan = (await stockDe(almacen))[lata];
+    const deMasEnCajas = await post('/api/ventas', { sitio_id: almacen, moneda: 'CUP',
+      lineas: [{ producto_id: lata, cantidad: Math.ceil(quedan / 24) + 1, medida: 'caja' }] });
+    comp('vender más cajas de las que hay se niega, contando en unidades',
+      deMasEnCajas.status === 400, deMasEnCajas.status);
+    // Y un producto sin bulto no acepta que le vendan «cajas»: dar por hecho que
+    // una caja es una unidad es cobrar de menos y no enterarse.
+    const clavoEnCajas = await post('/api/ventas', { sitio_id: almacen, moneda: 'CUP',
+      lineas: [{ producto_id: clavo, cantidad: 1, medida: 'caja' }] });
+    comp('y de lo que va suelto no se venden «cajas»', clavoEnCajas.status === 400,
+      clavoEnCajas.status);
+
     console.log('\n=== La merma en cajas también cuenta en unidades (#40) ===');
     const antesMerma = (await stockDe(tienda))[lata];
     await debe('/api/movimientos', { tipo: 'merma', sitio_id: tienda, producto_id: lata,
@@ -196,11 +234,16 @@ const elProducto = async id => ((await pedir('/api/productos')).cuerpo.productos
 
     console.log('\n=== La conversión vive en UNA función del servidor ===');
     // La misma cuenta escrita en cuatro sitios son cuatro cuentas que un día
-    // dejan de coincidir. Aquí se comprueba que hay una y que por ella pasan los
-    // tres caminos: entrada a mano, despacho y recepción.
+    // dejan de coincidir. Aquí se comprueba que hay UNA y que por ella pasan todos
+    // los caminos: entrada a mano, despacho, recepción y venta.
     const servidor = fs.readFileSync(path.join(raiz, 'server.js'), 'utf8');
     const usos = (servidor.match(/cantidadEnUnidades\(/g) || []).length;
-    comp('hay una sola función y la usan los tres caminos', usos === 4, usos + ' apariciones');
+    comp('hay una sola función y por ella pasan todos los caminos', usos === 5,
+      usos + ' apariciones');
+    // Desde el 4-sep-2026 la VENTA también pasa por ella (#51): hasta ese día solo
+    // sabía de unidades, y no se podía vender un saco entero.
+    comp('y la venta es uno de ellos',
+      servidor.includes('cant = cantidadEnUnidades(prod, l.cantidad, l.medida)'));
     comp('y la pantalla NO multiplica por su cuenta antes de mandar',
       !/cantidad: *[a-z.]+ *\* *[a-z.]*unidades_por_caja/i
         .test(fs.readFileSync(path.join(raiz, 'public/app.js'), 'utf8')));

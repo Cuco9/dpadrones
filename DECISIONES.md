@@ -2394,6 +2394,81 @@ un nombre parecido miente igual que no comprobar nada.
 
 ---
 
+## 51. En el almacén se vende por sacos; en la tienda, al kilo
+
+Contado por el dueño el **4 de septiembre de 2026**, y es la regla de su negocio:
+«la harina la vendo **por sacos a un precio más económico**, y **por kilos o libras
+a un precio más alto pero desde la tienda**. Desde el almacén vendo por sacos, y si
+transfiero a la tienda es para vender por unidad pero a otro precio».
+
+### Lo que ya estaba
+
+Casi todo, y conviene decirlo antes de tocar nada:
+
+- **Un solo producto**, con la harina contada en kilos por dentro y el saco como
+  bulto (#44). Dos productos —«saco» y «harina suelta»— habrían sido dos
+  inventarios distintos, y transferir habría sido vender uno y comprar el otro.
+- **Un precio distinto en cada local**: la ficha lo tiene desde el primer día en
+  «Precio distinto en algún sitio». El almacén cobra 100 el kilo —10 000 el saco— y
+  la tienda 200.
+- **La transferencia** del almacén a la tienda, que se escribe en sacos y entra en
+  kilos.
+
+### Lo que faltaba: vender en bultos
+
+La #44 dejó fuera la caja de venta **a propósito**, y lo dejó escrito: «la caja de
+venta y las inversiones se quedaron en unidades (no se pidieron)». Ya están
+pedidas. Para vender un saco había que teclear 100 kilos y hacer la cuenta de
+cabeza.
+
+Ahora cada línea del carro lleva **en qué se cuenta**, y debajo dice lo que se va a
+cobrar: **«1 saco de 100 = 100 kilogramos»**. El precio sigue siendo por unidad
+(#50), así que la línea cobra 100 × 100.
+
+**La cuenta la hace el SERVIDOR, por la misma función que todo lo demás.** La #44
+exige que la conversión viva en una sola función —entrada, merma, despacho,
+recepción— y ahora la venta pasa por ella también. Cinco caminos, una regla. Si la
+hiciera la pantalla, un teléfono con el código viejo mandaría «1» queriendo decir
+un saco y se vendería un kilo.
+
+### En un almacén se despacha por bultos; en una tienda, al detalle
+
+Es lo que viene **puesto**, y sale del tipo del local: los almacenes arrancan en
+sacos y los puntos de venta en unidades. Así no hay que cambiar la medida en cada
+venta, que es lo que convertiría una comodidad en un estorbo.
+
+No es una regla, es un valor por defecto: se cambia en la propia línea con un
+toque, porque un almacén también puede vender suelto algún día.
+
+### Dos cuentas que había que rehacer, y no son un detalle
+
+**Lo que queda disponible se cuenta en UNIDADES.** El carro apartaba «lo escrito»,
+así que una línea de 3 sacos apartaba tres kilos: se podían meter en el carro cien
+veces más de lo que hay sin que nada avisara. Y el tope al escribir la cantidad se
+comparaba igual de mal; ahora dice **«solo hay para 4 sacos»**, en la medida en la
+que se está escribiendo.
+
+**El bulto se guarda EN LA LÍNEA del carro**, no se busca en el catálogo. El carro
+vive en el teléfono y sobrevive a cerrar la aplicación: si mañana alguien corrige
+«el saco trae 100» por «trae 50», una venta a medio anotar cambiaría de cantidad
+sola.
+
+### Y una decisión suya que la aplicación no puede tomar
+
+**El bulto es para quien compra por sacos y vende al kilo.** Si algo se compra y se
+vende por sacos, la unidad ES el saco y no hace falta bulto ninguno: 3 sacos son 3
+unidades y el precio es el del saco. Ponerle bulto es complicarse sin ganar nada.
+
+En su caso hace falta, porque el mismo saco se vende entero en el almacén y al kilo
+en la tienda.
+
+`pruebas/bultos.js` sube a **29 comprobaciones**: que se vende «2 cajas» y del
+estante salen 48, que se cobra la caja entera, que sin decir la medida se venden
+unidades como siempre, que no se venden más cajas de las que hay —contando en
+unidades— y que de lo que va suelto no se venden «cajas».
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía
