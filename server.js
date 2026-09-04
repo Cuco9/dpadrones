@@ -256,6 +256,44 @@ function initDB() {
       ' venta(s) de antes quedan como cobradas enteras');
   }
 
+  // DE QUÉ LOCAL ES CADA PRODUCTO (DECISIONES.md #45). Pedido por el dueño el
+  // 4 de septiembre de 2026: los productos se crean en su propio apartado y de
+  // ahí se van asignando al almacén o a la tienda que les toque.
+  //
+  // La columna dice quién lo CREÓ, no dónde está: dónde está se sigue sabiendo
+  // sumando 'movimientos', y eso no se toca (#1). Son dos preguntas distintas, y
+  // el dueño de un producto no cambia porque se mueva una caja de sitio.
+  //
+  // Un producto se ve en su local y en cualquiera que haya tenido mercancía suya
+  // alguna vez —si no, lo que el almacén despacha a una tienda no se podría
+  // vender allí—. Vacío quiere decir «todavía sin local», y entonces sale SOLO
+  // en el apartado de Productos.
+  // Un trabajador que se quita deja de estar en la lista, pero su fila se queda:
+  // las ventas, los cierres y las comisiones que hizo siguen apuntando a ella, y
+  // borrarla de verdad dejaria el historial sin nombres (#2 y #3). Es el mismo
+  // borrado suave de los productos.
+  anadir('personas', 'borrado_en', 'TEXT');
+
+  anadir('productos', 'sitio_id', 'TEXT');
+
+  // Y los que ya estaban no son de nadie. Pasan al almacén principal, que es
+  // quien los ve todos de todas formas: así ninguna tienda pierde de vista lo
+  // que hoy tiene en el estante —lo sigue viendo por sus movimientos— y a partir
+  // de hoy lo que se cree nace con su local de verdad.
+  //
+  // Corre UNA VEZ, con su marca en 'ajustes'. Sin ella, un producto que el dueño
+  // hubiera movido a mano a otro local volvería al almacén en cada reinicio.
+  if (!ajuste('productos_con_dueno')) {
+    const principal = db.prepare(`SELECT id FROM sitios WHERE tipo='almacen' AND activo=1
+        ORDER BY creado_en LIMIT 1`).get();
+    if (principal) {
+      const r = db.prepare('UPDATE productos SET sitio_id=? WHERE sitio_id IS NULL')
+        .run(principal.id);
+      ajuste('productos_con_dueno', new Date().toISOString());
+      console.log('[migracion] ' + r.changes + ' producto(s) pasan a ser del almacén principal');
+    }
+  }
+
   console.log('✓ Base de datos lista:', RUTA_DB);
 }
 initDB();
@@ -370,9 +408,27 @@ function revisarFoto(f) {
 // y se colaba en la respuesta sin que nadie tuviera que escribirla.
 const CAMPOS_PRODUCTO = `id, codigo, codigo_barra, nombre, categoria, um, costo,
   costo_repo, precio, precio_moneda, comision, comision_pct, stock_min, destacado,
-  unidades_por_caja, nombre_caja,
+  unidades_por_caja, nombre_caja, sitio_id,
   creado_en, actualizado,
   (foto IS NOT NULL) tiene_foto`;
+
+// El almacén principal: el más viejo de los almacenes. Es el mirador del negocio
+// (#22) y el único que ve el catálogo entero (#45). Se calcula, no se guarda, para
+// que el aparato y el servidor no puedan elegir uno distinto.
+function sitioPrincipalId() {
+  const s = db.prepare(`SELECT id FROM sitios WHERE tipo='almacen' AND activo=1
+      ORDER BY creado_en LIMIT 1`).get();
+  return s ? s.id : null;
+}
+
+// Un id de local que exista y esté encendido, o null. Se comprueba SIEMPRE antes
+// de guardarlo: un id muerto en 'productos.sitio_id' dejaría el producto sin
+// local y no se vería en ninguna pantalla, sin que nadie supiera por qué.
+function elSitio(id) {
+  const v = String(id || '').trim();
+  if (!v) return null;
+  return db.prepare('SELECT 1 FROM sitios WHERE id=? AND activo=1').get(v) ? v : null;
+}
 
 function productosConPrecios() {
   const productos = db.prepare(
@@ -380,7 +436,21 @@ function productosConPrecios() {
   const precios = db.prepare('SELECT * FROM precios_sitio').all();
   const porProducto = {};
   precios.forEach(p => (porProducto[p.producto_id] = porProducto[p.producto_id] || []).push(p));
-  productos.forEach(p => { p.precios = porProducto[p.id] || []; });
+
+  // En qué locales se ha visto cada producto (DECISIONES.md #45). NO es dónde hay
+  // existencia: es dónde ha habido movimiento alguna vez. Una tienda que vendió
+  // hasta el último saco tiene que seguir viéndolo, porque mañana le mandan más;
+  // si se fuera al llegar a cero, desaparecería de la pantalla justo el día que hay
+  // que pedirlo.
+  const vistos = {};
+  for (const m of db.prepare(`SELECT producto_id, sitio_id FROM movimientos
+      WHERE sitio_id IS NOT NULL GROUP BY producto_id, sitio_id`).all())
+    (vistos[m.producto_id] = vistos[m.producto_id] || []).push(m.sitio_id);
+
+  productos.forEach(p => {
+    p.precios = porProducto[p.id] || [];
+    p.sitios = vistos[p.id] || [];
+  });
   return productos;
 }
 
@@ -486,7 +556,7 @@ app.use('/api', (req, res, next) => {
       // bastaría con no mandar el dato para recuperar los permisos de
       // administrador, y entonces esto no sería «ver como él» sino un adorno.
       if (s.como_persona_id) {
-        const otro = db.prepare('SELECT * FROM personas WHERE id=? AND activo=1')
+        const otro = db.prepare('SELECT * FROM personas WHERE id=? AND activo=1 AND borrado_en IS NULL')
           .get(s.como_persona_id);
         // Solo un administrador puede estar en la piel de otro. Se vuelve a
         // comprobar en CADA petición: si mientras está dentro alguien le quita el
@@ -716,7 +786,7 @@ app.post('/api/auth/recuperar', (req, res) => {
   const espera = frenado('rec|' + usuario);
   if (espera) return res.status(429).json({
     error: 'Demasiados intentos. Espera ' + Math.ceil(espera / 60) + ' minuto(s).' });
-  const p = db.prepare('SELECT * FROM personas WHERE usuario=? AND activo=1').get(usuario);
+  const p = db.prepare('SELECT * FROM personas WHERE usuario=? AND activo=1 AND borrado_en IS NULL').get(usuario);
   const clave = String(b.clave || '').trim().toUpperCase();
   if (!p || !p.recuperacion_hash || !pinCorrecto(clave, p.recuperacion_hash)) {
     fallo('rec|' + usuario);
@@ -815,7 +885,7 @@ app.post('/api/auth/entrar', (req, res) => {
   const espera = frenado(usuario);
   if (espera) return res.status(429).json({
     error: 'Demasiados intentos fallidos. Espera ' + Math.ceil(espera / 60) + ' minuto(s).' });
-  const p = db.prepare('SELECT * FROM personas WHERE usuario=? AND activo=1').get(usuario);
+  const p = db.prepare('SELECT * FROM personas WHERE usuario=? AND activo=1 AND borrado_en IS NULL').get(usuario);
   if (!p || !pinCorrecto(b.pin, p.pin_hash)) {
     fallo(usuario);
     return res.status(401).json({ error: 'Usuario o PIN incorrectos' });
@@ -881,7 +951,7 @@ app.post('/api/auth/como', (req, res) => {
     db.prepare('UPDATE sesiones SET como_persona_id=NULL WHERE token=?').run(req.token);
     return res.json({ ok: true, como: null });
   }
-  const otro = db.prepare('SELECT * FROM personas WHERE id=? AND activo=1').get(id);
+  const otro = db.prepare('SELECT * FROM personas WHERE id=? AND activo=1 AND borrado_en IS NULL').get(id);
   if (!otro) return res.status(404).json({ error: 'Esa persona no está o no tiene acceso' });
   if (otro.id === firmante.id) return res.status(400).json({
     error: 'Ya eres tú.' });
@@ -934,6 +1004,7 @@ app.get('/api/cargos', exige('gestionar_personas'), (req, res) => {
     personas: db.prepare(`SELECT p.id,p.nombre,p.usuario,p.cargo_id,p.sitio_id,p.activo,
         p.moneda_pago, c.nombre cargo, s.nombre sitio FROM personas p
         LEFT JOIN cargos c ON c.id=p.cargo_id LEFT JOIN sitios s ON s.id=p.sitio_id
+        WHERE p.borrado_en IS NULL
         ORDER BY p.activo DESC, p.nombre`).all(),
     permisos_posibles: PERMISOS
   });
@@ -999,7 +1070,8 @@ app.delete('/api/cargos/:id', exige('gestionar_personas'), (req, res) => {
   if (!c || c.borrado_en) return res.status(404).json({ error: 'Ese cargo ya no está' });
   if (c.es_admin) return res.status(400).json({
     error: 'El cargo de Administrador no se puede quitar: sin él nadie podría volver a entrar.' });
-  const suyos = db.prepare('SELECT nombre FROM personas WHERE cargo_id=? ORDER BY nombre').all(id);
+  const suyos = db.prepare(`SELECT nombre FROM personas
+      WHERE cargo_id=? AND borrado_en IS NULL ORDER BY nombre`).all(id);
   if (suyos.length) return res.status(400).json({
     error: 'Este cargo lo tiene ' + (suyos.length === 1 ? '' : suyos.length + ' personas: ') +
            suyos.map(p => p.nombre).join(', ') +
@@ -1047,6 +1119,48 @@ app.post('/api/personas', exige('gestionar_personas'), (req, res) => {
     .run(id, nombre, usuario, hashPin(b.pin), b.cargo_id || null, b.sitio_id || null,
          monedaPago(b.moneda_pago), ahora, ahora);
   res.json({ ok: true, id });
+});
+
+// QUITAR UN TRABAJADOR. Pedido por el dueño el 4 de septiembre de 2026: hasta hoy
+// solo se le podía quitar el acceso, y la lista se llenaba de gente que ya no
+// está. Ahora se quita de la lista y no puede volver a entrar.
+//
+// Se quita en BLANDO: la fila se queda con la fecha en que se quitó, porque las
+// ventas, los cierres y las comisiones que hizo apuntan a ella. Borrarla de verdad
+// dejaría el historial diciendo «Sin identificar» donde antes decía su nombre, y
+// eso es reescribir lo que pasó (#2). Lo que se ve en pantalla es lo mismo: deja
+// de salir en el personal, en el reparto del día y en la puerta de entrada.
+//
+// DOS PUERTAS CERRADAS, y las dos por lo mismo: para no dejar el negocio sin
+// nadie que pueda entrar a arreglarlo.
+app.delete('/api/personas/:id', exige('gestionar_personas'), (req, res) => {
+  const id = String(req.params.id);
+  const p = db.prepare('SELECT * FROM personas WHERE id=?').get(id);
+  if (!p || p.borrado_en) return res.status(404).json({ error: 'Ese trabajador ya no está' });
+  const yo = req.comoPersona || req.persona;
+  if (yo && yo.id === id) return res.status(400).json({
+    error: 'No puedes quitarte a ti mismo. Que lo haga otra persona con permiso.' });
+
+  // El último administrador que queda en pie no se quita: sin él nadie podría
+  // volver a entrar a dar permisos, y la aplicación se quedaría cerrada por
+  // dentro con todos los datos dentro.
+  const suCargo = db.prepare('SELECT es_admin FROM cargos WHERE id=?').get(p.cargo_id || '');
+  if (suCargo && suCargo.es_admin) {
+    const otros = db.prepare(`SELECT COUNT(*) n FROM personas pe
+        JOIN cargos c ON c.id = pe.cargo_id
+        WHERE c.es_admin=1 AND pe.activo=1 AND pe.borrado_en IS NULL AND pe.id != ?`).get(id).n;
+    if (!otros) return res.status(400).json({
+      error: 'Es el único administrador que queda. Nombra otro antes de quitarlo, ' +
+             'o nadie podría volver a entrar.' });
+  }
+
+  const ahora = ahoraISO();
+  db.prepare('UPDATE personas SET borrado_en=?, activo=0, actualizado=? WHERE id=?')
+    .run(ahora, ahora, id);
+  // Y fuera sus sesiones: si no, el teléfono que dejó abierto sigue dentro.
+  const fuera = db.prepare('DELETE FROM sesiones WHERE persona_id=?').run(id).changes;
+  if (fuera) console.log('[personas] ' + p.nombre + ' quitado: ' + fuera + ' sesión(es) cerradas');
+  res.json({ ok: true });
 });
 
 // ─── Comisiones por vendedor ──────────────────────────────────
@@ -1348,18 +1462,37 @@ app.post('/api/productos', exige('gestionar_productos'), (req, res) => {
   const foto = revisarFoto(b.foto);
   if (foto === false) return res.status(400).json({
     error: 'La foto es demasiado grande. Hazla otra vez desde la aplicación.' });
+
+  // DE QUÉ LOCAL ES (DECISIONES.md #45). Mandar el local VACÍO y NO MANDARLO son
+  // dos cosas distintas, y juntarlas rompe una de las dos:
+  //
+  //   vacío            → «todavía sin local», a propósito, para asignarlo después
+  //   no viene         → un aparato que no sabe de esto: el local de quien lo crea
+  //   un local         → ese, después de comprobar que existe y está encendido
+  //
+  // Si «vacío» se tratara como «no viene», la opción de dejarlo sin local no haría
+  // nada y el producto acabaría en el almacén principal calladamente. Y al revés,
+  // un teléfono con el app.js viejo en su caché dejaría sin local cada producto que
+  // creara sin que nadie lo hubiera pedido.
+  if (b.sitio_id && !elSitio(b.sitio_id))
+    return res.status(400).json({ error: 'Ese local no existe' });
+  const deQuienEs = b.sitio_id === undefined
+    ? (elSitio(req.persona && req.persona.sitio_id) || sitioPrincipalId())
+    : elSitio(b.sitio_id);
+
   db.prepare(`INSERT INTO productos
       (id, codigo, codigo_barra, nombre, categoria, um, costo, costo_repo, precio,
        precio_moneda, comision, comision_pct, stock_min, foto, destacado,
-       unidades_por_caja, nombre_caja, creado_en, actualizado)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+       unidades_por_caja, nombre_caja, sitio_id, creado_en, actualizado)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, codigo, b.codigo_barra || null, String(b.nombre).trim(), b.categoria || '',
          b.um || 'Unidad', Number(b.costo) || 0, Number(b.costo_repo) || 0,
          Number(b.precio) || 0, b.precio_moneda === 'USD' ? 'USD' : 'CUP',
          Number(b.comision) || 0, b.comision_pct ? 1 : 0,
          Number(b.stock_min) || 0, foto, b.destacado ? 1 : 0,
          Math.max(0, Number(b.unidades_por_caja) || 0),
-         (b.nombre_caja && String(b.nombre_caja).trim().slice(0, 20)) || null, ahora, ahora);
+         (b.nombre_caja && String(b.nombre_caja).trim().slice(0, 20)) || null,
+         deQuienEs, ahora, ahora);
   guardarPreciosSitio(id, b.precios);
   res.json({ ok: true, id, codigo });
 });
@@ -1368,6 +1501,11 @@ app.put('/api/productos/:id', exige('gestionar_productos'), (req, res) => {
   const b = req.body || {};
   const existe = db.prepare('SELECT id FROM productos WHERE id=? AND borrado_en IS NULL').get(req.params.id);
   if (!existe) return res.status(404).json({ error: 'Ese producto no existe' });
+  // Un local inventado se rechaza ANTES de escribir nada: un 400 después de haber
+  // guardado el nombre y el precio deja la pantalla diciendo que no se guardó y la
+  // base diciendo que sí.
+  if (b.sitio_id && !elSitio(b.sitio_id))
+    return res.status(400).json({ error: 'Ese local no existe' });
   // NO MANDAR foto y mandarla VACÍA son dos cosas distintas, y confundirlas borra
   // las fotos de todo el catálogo. Desde que el catálogo viaja sin las fotos, la
   // pantalla no tiene la foto en la mano al editar un producto: si no se toca, no
@@ -1395,6 +1533,15 @@ app.put('/api/productos/:id', exige('gestionar_productos'), (req, res) => {
          Math.max(0, Number(b.unidades_por_caja) || 0),
          (b.nombre_caja && String(b.nombre_caja).trim().slice(0, 20)) || null,
          ahoraISO(), req.params.id);
+
+  // El local va aparte, y solo si VIENE (DECISIONES.md #45). No mandarlo significa
+  // «déjalo donde está»: si se aplicara siempre, una pantalla vieja —o un aparato
+  // que todavía no se ha actualizado— dejaría el producto sin local al guardarle el
+  // precio, y desaparecería de su tienda sin que nadie entendiera por qué. Es la
+  // misma trampa de la foto de aquí arriba, y se resuelve igual.
+  if (b.sitio_id !== undefined)
+    db.prepare('UPDATE productos SET sitio_id=? WHERE id=?')
+      .run(elSitio(b.sitio_id), req.params.id);
   guardarPreciosSitio(req.params.id, b.precios);
   res.json({ ok: true });
 });
@@ -3196,7 +3343,8 @@ app.get('/api/dia', exige('ver_ventas', 'cerrar_dia', 'ver_informes'), (req, res
 // nombre. Va lo justo para pintarlas: el id y el nombre.
 function gentePosible(sitio) {
   return db.prepare(`SELECT id, nombre, sitio_id FROM personas
-      WHERE activo=1 ORDER BY (sitio_id IS NOT ?) , nombre`).all(sitio);
+      WHERE activo=1 AND borrado_en IS NULL
+      ORDER BY (sitio_id IS NOT ?) , nombre`).all(sitio);
 }
 function presentesDe(sitio, fecha) {
   return db.prepare(`SELECT persona_id FROM dia_personas
@@ -4407,8 +4555,14 @@ app.delete('/api/inversiones/:id', exige('gestionar_inversiones'), (req, res) =>
 // ═══════════════════════════════════════════════════════════════
 // Una salva es la base de datos entera: quien la tenga, lo tiene todo. Por eso
 // pide el permiso más alto que hay.
+//
+// LA CARPETA DONDE SE GUARDAN NO SE MANDA. Es una ruta de la máquina, y una ruta
+// en la pantalla de un cliente no le sirve para nada: no puede ir a mirarla, no
+// puede cambiarla, y enseña por dentro un trabajo que se entrega terminado. Lo
+// pidió el dueño el 3 y el 4 de septiembre de 2026, y vale para todas las
+// pantallas: ni rutas, ni nada que hable de por dentro.
 app.get('/api/salvas', exige('copias'), (req, res) => {
-  res.json({ salvas: listarSalvas(), carpeta: RUTA_SALVAS,
+  res.json({ salvas: listarSalvas(),
              cada_horas: SALVAS_CADA, guardar: SALVAS_GUARDAR });
 });
 

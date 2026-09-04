@@ -562,7 +562,7 @@ comp('el mes y la lista de comisiones están dentro de esa pantalla',
 // Se busca DENTRO del apartado de Ajustes y no en todo el archivo: la lista vive
 // ahora en Dinero, que va antes, así que un patrón suelto la encuentra allí y la
 // prueba pasa sin comprobar nada.
-const ajGente = (html.match(/id="aj-gente"[\s\S]*?fin de La gente/) || [''])[0];
+const ajGente = (html.match(/id="aj-gente"[\s\S]*?fin de Personal/) || [''])[0];
 comp('en Ajustes ya no queda la lista, solo el aviso de dónde está',
   !/id="lista-comisiones"/.test(ajGente) && /Dinero → Comisiones/.test(ajGente));
 // Y TODO apunte a mano tiene que decir en qué caja pasa el dinero —desde el
@@ -620,6 +620,40 @@ comp('y la comprobación caza el mensaje que salió en el teléfono',
   literales("throw new Error('Comprueba que está arrancado: escribe npm start en la consola.');")
     .some(t => JERGA.test(t)));
 
+// LO DE DENTRO NO SE NOMBRA, Y LAS RUTAS MENOS. Ampliado el 4 de septiembre de
+// 2026, con dos que se le colaron al dueño en la pantalla: Ajustes le enseñaba la
+// carpeta del disco donde se guardan las copias, y una tarjeta que decía
+// «Servidor: en marcha». Sus palabras: «eso es algo que me interesa a mí como
+// programador y no a mi cliente; solo informarle a él de lo relacionado con su
+// negocio».
+//
+// No es lo mismo que la jerga de arriba: estas palabras no son de programación,
+// son de las TRIPAS. Quien usa la aplicación no puede hacer nada con ellas.
+//
+// Se saltan los literales que nunca se leen —direcciones, identificadores de la
+// pantalla, tipos de archivo—, porque ahí «servidor» es parte de un nombre y está
+// perfectamente.
+const TRIPAS = /(servidor|nginx|pm2|backend|deploy)/i;
+const RUTA = /(^|[\s"'(«])(\/root|\/etc|\/var|\/home|[A-Za-z]:\\)/;
+const esCodigoYNoTexto = t => /^['"`][\/#.]|^['"`][a-z-]+\/[a-z+-]+['"`]$|^['"`][a-z][a-z0-9-]*['"`]$/i.test(t);
+const sinComentariosJS = t => t.replace(/^\s*\/\/.*$/gm, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+const tripasJS = literales(sinComentariosJS(js))
+  .filter(t => !esCodigoYNoTexto(t) && (TRIPAS.test(t) || RUTA.test(t)));
+comp('en app.js no se nombran las tripas ni ninguna carpeta del disco', !tripasJS.length,
+  tripasJS.slice(0, 3).join(' · ').slice(0, 200));
+
+// En el HTML se mira SOLO lo que queda entre etiquetas, que es lo que se lee: en
+// un atributo puede haber una dirección con la palabra dentro y no la ve nadie.
+const textosHTML = (sinComentariosHTML(html).match(/>[^<>]+</g) || []);
+const tripasHTML = textosHTML.filter(t => TRIPAS.test(t) || RUTA.test(t));
+comp('en index.html no se nombran las tripas ni ninguna carpeta del disco', !tripasHTML.length,
+  tripasHTML.slice(0, 2).map(t => t.replace(/\s+/g, ' ').trim()).join(' · ').slice(0, 200));
+
+// Y que el servidor no MANDE la carpeta de las copias, que es por donde entró:
+// mientras viaje al aparato, cualquier día alguien vuelve a pintarla.
+comp('la carpeta de las copias no sale del servidor', !/carpeta: RUTA_SALVAS/.test(servidor));
+
 console.log('\n=== Las palabras de la pantalla ===');
 // Pedido por el dueño: «hay palabras que no son muy profesionales».
 // La única «aparato» que queda es el nombre de la columna de la tabla de
@@ -674,14 +708,22 @@ comp('la ficha tiene la casilla, y su explicación',
   /id="f-existencia-caja"/.test(html) && /id="f-existencia"/.test(html) &&
   /id="f-existencia-pista"/.test(html));
 comp('solo se pregunta al crear, no al editar',
-  /const puedeExistencia = !p && puedo\('gestionar_inventario'\)/.test(js) &&
+  /const puedeExistencia = fichaNaciendo && puedo\('gestionar_inventario'\)/.test(js) &&
   /\$\('f-existencia-caja'\)\.style\.display = puedeExistencia \? 'block' : 'none'/.test(js));
 // Quien solo lleva el catálogo no puede mover mercancía: si viera la casilla,
 // crearía el producto y el servidor le rechazaría la entrada después.
 comp('y solo a quien puede mover mercancía',
-  /puedeExistencia = !p && puedo\('gestionar_inventario'\)/.test(js));
-comp('se apunta como ENTRADA de verdad, en el sitio donde se está',
-  /api\('\/api\/movimientos'[\s\S]{0,200}tipo: 'compra'[\s\S]{0,120}sitio_id: sitioActual\(\)/.test(js));
+  /puedeExistencia = fichaNaciendo && puedo\('gestionar_inventario'\)/.test(js));
+// Y SOLO SI EL PRODUCTO TIENE LOCAL (#45): la mercancía tiene que estar en algún
+// sitio, y uno que se deja «todavía sin local» no tiene dónde meterla.
+comp('y solo si el producto tiene local, porque si no no hay dónde meterla',
+  /puedeExistencia = fichaNaciendo && puedo\('gestionar_inventario'\) && !!donde/.test(js));
+// La entrada va al local DEL PRODUCTO, no al que se esté mirando: desde el almacén
+// principal se crean cosas que son de una tienda, y meterlas en el almacén las
+// dejaría contadas donde no están.
+comp('se apunta como ENTRADA de verdad, en el local del producto',
+  /api\('\/api\/movimientos'[\s\S]{0,200}tipo: 'compra'[\s\S]{0,120}sitio_id: sitioId/.test(js) &&
+  /apuntarExistenciaInicial\(r\.id, cuerpo\.costo, existencia,\s*localDeLaFicha\(\)\)/.test(js));
 // El cuerpo que viaja a /api/productos es el que no puede llevarla: guardarla
 // ahí sería el campo «este punto tiene 47 unidades» que la #1 prohíbe.
 comp('NO viaja dentro del producto: el stock se sigue calculando',

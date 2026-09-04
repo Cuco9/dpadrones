@@ -1764,6 +1764,329 @@ dos veces.
 
 ---
 
+## 45. Los productos se crean en su apartado, y de ahí se les pone local
+
+Pedido por el dueño el **4 de septiembre de 2026**: «que el sistema de productos
+funcione como lo hace la otra aplicación: los productos se crean en su apartado
+de Productos y se asignan a los almacenes», dejando **la ficha de crear un
+producto tal como está**, que es la suya y tiene el bulto (#44) y la existencia
+con la que nace. Y sobre los almacenes: «hay un almacén principal que es la suma
+de todos los almacenes, se pueden transferir productos de un almacén a otro
+cambiando de un saco a unidad o de una caja a unidad; **eso se mantiene igual**».
+
+Hasta ese día el catálogo era **uno solo para todo el negocio** y los productos se
+creaban desde el Almacén. Quien despacha en una tienda con quince productos
+delante buscaba entre todos los del negocio, y la pantalla de existencias le
+enseñaba en rojo cosas que nunca estuvieron allí. La campanita llegaba a avisarle
+de que se había acabado algo que esa tienda no ha tenido en su vida.
+
+### Dos pantallas, y cada una contesta una pregunta
+
+**Productos** es el catálogo: qué productos existen, cómo son y de quién son. Ahí
+se crean, se editan y se les pone local. **Almacén** es la mercancía: lo que hay,
+lo que entra, lo que se merma y lo que se transfiere. Tocar una fila en cualquiera
+de las dos abre la misma ficha, que sigue siendo una sola.
+
+El botón «Nuevo producto» se fue del Almacén: crear un producto ahí y ponerle
+local desde otra pantalla eran dos mitades de la misma cosa en dos sitios.
+
+### Lo que se ve en un local, y por qué no es solo «lo que se creó aquí»
+
+Un producto se ve en **el local que lo creó** y en **cualquier local que haya
+tenido mercancía suya alguna vez**.
+
+La segunda mitad no es un adorno, es lo que hace que la regla funcione: **el
+almacén principal surte a los puntos**, así que casi todo lo que una tienda vende
+se creó en el almacén. Con la regla literal —solo lo creado aquí—, la tienda
+recibiría la transferencia y **no podría venderlo**: el producto no saldría en su
+pantalla. Habría que crearlo otra vez a mano, y entonces habría dos productos con
+el mismo nombre, dos códigos y dos existencias, que es exactamente la clase de
+duplicado que esta aplicación existe para no tener.
+
+Y se mira si ha **habido movimiento**, no si **queda existencia**. Una tienda que
+vendió hasta el último saco tiene que seguir viéndolo, porque mañana le mandan
+más; si desapareciera al llegar a cero, se iría de la pantalla justo el día que
+hay que pedirlo.
+
+**El almacén principal los ve todos.** Es el mirador del negocio (#22): quien está
+allí lleva las cuentas de todo y necesita ver también lo que cada tienda se ha
+creado por su cuenta. Y eligiendo «Todo el negocio, sumado» en el Almacén salen
+todos los productos asignados, que es justo lo que se ha pedido mirar.
+
+### «Todavía sin local» es una respuesta, no un hueco sin rellenar
+
+El desplegable de la ficha tiene una opción más, y va la primera: **«todavía sin
+local — se lo pongo después»**. Sirve para meter el catálogo de golpe: sentado con
+la lista delante, decidir de quién es cada producto uno por uno es parar cada dos
+minutos.
+
+Un producto sin local **no sale en ningún local**: ni en la caja, ni en el
+almacén, ni en el escáner, ni en la campanita, ni en los buscadores de un
+movimiento o de una inversión. **Ni siquiera en el almacén principal**, que ve
+todo lo demás: «todo el negocio, sumado» suma lo que está **asignado**, porque
+ahí se cuentan existencias y un producto sin local todavía no es de nadie.
+
+Sale en **un solo sitio**: la pantalla de Productos. Es donde se crea y desde
+donde se le pone local, y si no saliera ahí no habría manera de asignarlo. Para
+encontrarlos, el desplegable **«todavía sin local»** saca de golpe la lista de lo
+que queda por repartir; solo lo ve quien mira el negocio entero, que es quien
+puede poner locales, pero el **rótulo** de la lista lo ve todo el mundo: es lo que
+explica por qué ese producto no aparece en la caja.
+
+### Pero lo que está sirviendo en un local no se esconde nunca
+
+Ese es el peligro de esta decisión, y por eso «suelto» no es «sin local» a secas:
+
+> **Suelto = sin local Y sin movimientos en ningún local.**
+
+Si a un producto que tiene treinta aguas en la tienda se le quita el local,
+esconderlo dejaría esa mercancía **sin poder venderse y sin que nadie entienda por
+qué**. Mientras haya movimientos suyos en un local, ese local lo sigue viendo. En
+la práctica, lo que se esconde es exactamente lo que se acaba de escribir y
+todavía no ha visto una caja: ni más ni menos.
+
+### La existencia inicial va pegada al local
+
+La ficha pregunta lo que hay al crear un producto, y eso apunta una **entrada** de
+verdad (#1). Con la opción de dejarlo sin local, esa pregunta **desaparece
+mientras no haya local**: la mercancía tiene que estar EN algún sitio, y un
+producto que no es de nadie no tiene dónde meterla. En cuanto se elige un local la
+casilla vuelve, diciendo en cuál va a entrar.
+
+Y entra en el local **del producto**, no en el que se esté mirando: desde el
+almacén principal se crean cosas que son de una tienda, y meterlas en el almacén
+las dejaría contadas donde no están. Sin esto, meter el catálogo de una tanda
+—que es para lo que existe «todavía sin local»— apuntaría cada existencia en el
+local donde se esté parado, y el producto acabaría viéndose allí de todas formas
+por sus movimientos, que es justo lo que se quería evitar.
+
+### Dónde vive el dato
+
+Una columna `sitio_id` en `productos` que dice **quién lo creó**, no dónde está.
+**Dónde está se sigue sabiendo sumando `movimientos`, y eso no se toca** (#1). Son
+dos preguntas distintas: el dueño de un producto no cambia porque se mueva una
+caja de sitio.
+
+**Los que ya existían pasan al almacén principal**, con su marca en `ajustes` para
+que corra una sola vez. Es lo menos destructivo: el principal los ve todos de
+todas formas, y cada tienda sigue viendo los que tiene en el estante porque tiene
+movimientos suyos. Ninguna tienda pierde de vista nada al desplegar. Si la
+migración corriera en cada arranque, un producto que el dueño hubiera movido a
+mano a su tienda volvería al almacén solo.
+
+### Mandar el local vacío y no mandarlo son dos cosas distintas
+
+Es la misma trampa de la foto en el `PUT` de productos, y se resuelve igual:
+
+| Lo que llega | Qué significa |
+|---|---|
+| un local | ese, después de comprobar que existe y está encendido |
+| **vacío** | todavía sin local, **a propósito** |
+| **no viene el campo** | un aparato que no sabe de esto: el local de quien lo crea, y si no tiene, el almacén principal |
+
+Si se juntaran los dos últimos, un teléfono con el `app.js` viejo en su caché
+dejaría sin local a cada producto que creara, sin que nadie lo hubiera pedido. Y
+al revés: si «vacío» se tratara como «no viene», la opción nueva no haría nada y
+el producto acabaría en el almacén principal calladamente. Al editar, **no mandar
+el campo significa «déjalo donde está»**: si se aplicara siempre, guardarle el
+precio desde una pantalla vieja dejaría el producto sin local y desaparecería de
+su tienda sin que nadie entendiera por qué.
+
+Un local **inventado** se rechaza con un 400, y **antes de escribir nada**: un 400
+después de haber guardado el nombre y el precio deja la pantalla diciendo que no
+se guardó y la base diciendo que sí.
+
+### Duplicar es abrir otra ficha, no guardar otro producto
+
+Se copia todo lo que se parece —categoría, unidad, bulto, costo, costo de
+reposición, precio con sus excepciones por local, comisión, mínimo, local y foto—
+y se quedan fuera las dos cosas que son de **ese** producto y de ningún otro:
+
+- el **código de la aplicación**, que lo pone el servidor al crear: enseñar el del
+  original mientras todavía no existe el nuevo sería mentir;
+- el **código del fabricante**, que es el que viene impreso en su caja y no es el
+  mismo que el del que se le parece.
+
+El nombre llega con **«(copia)»** detrás, para que no queden dos iguales si
+alguien guarda sin mirar.
+
+**No se guarda nada hasta que se pulsa Guardar.** Duplicar no crea un producto:
+abre la ficha con lo copiado dentro. Si se cierra, no ha pasado nada. La otra
+forma —crear la copia en el servidor y abrirla para editarla— deja un producto
+suelto cada vez que alguien se arrepiente. Y **duplicar no puede acabar editando
+el original**, que es la forma de perder un producto sin enterarse: por eso la
+prueba no lee el código buscando un texto, sino que **ejecuta** `abrirFicha()`
+contra un formulario de mentira y comprueba qué queda escrito en cada casilla.
+
+### Lo que NO hizo falta, y lo que NO se toca
+
+**No hay guardián nuevo en el servidor.** Vender en la Tienda algo del almacén ya
+es imposible desde la #40: no se rebaja mercancía que no está, y en la Tienda no
+está. Esto es una decisión de **qué se enseña**, y por eso vive donde se enseña.
+Añadir una segunda comprobación diciendo lo mismo por otro camino es como se llega
+a dos reglas que un día dejan de coincidir.
+
+**Cambiar un producto de local solo lo ve quien mira el negocio entero.** Quien
+despacha en una tienda crea lo suyo y no tiene por qué decidir de quién es, ni
+poder regalárselo a otro local sin querer.
+
+**Las transferencias no se tocan**, ni el bulto, ni Dinero. Se puede seguir
+mandando mercancía de un almacén a otro escribiendo en cajas o en sacos y
+recibiéndola en unidades (#44), y Dinero sigue como estaba: el almacén principal
+enseña el negocio entero sumado y, debajo, sitio por sitio (#22 y #24).
+
+### Las dos recargas que hay que no olvidar
+
+**Al cambiar de local**, el catálogo y sus categorías se repintan. Sin eso, al
+cambiar de tienda se seguiría viendo la lista de la anterior hasta salir y volver
+a entrar.
+
+**Al recibir una transferencia**, se vuelve a pedir el catálogo y no solo el
+almacén. Lo que acaba de llegar puede ser un producto que este local no tenía
+todavía, y hasta que no se vuelve a pedir, la aplicación no sabe que ya es suyo:
+se recibiría mercancía que no se puede vender.
+
+`pruebas/locales.js` (nuevo) comprueba las dos mitades de la regla, la del mirador
+y la de la ficha. Las dos que hay que mirar juntas son las que se contradicen a
+medias: que un producto sin local **no sale en ningún local**, y que uno sin local
+**con mercancía en la tienda sí sale en la tienda**. Si algún día una de las dos
+se rompe, la otra sigue en verde y el fallo pasa desapercibido.
+
+### Y dos palabras de la pantalla
+
+El botón **«Despachar»** del Almacén pasa a llamarse **«Transferencia»**, y con él
+todo lo que se lee al usarlo, porque el dueño llama transferencia a mandar
+mercancía de un local a otro. Por dentro sigue siendo un traslado y no cambia ni
+un dato.
+
+Y la casilla **«¿Cuánto tienes ahora?»** de la ficha pasa a llamarse **«Stock»**,
+que es como él la nombra y como ya se llamaba la alerta de más abajo.
+
+---
+
+## 46. En la pantalla no se nombran las tripas, y las rutas menos
+
+Dicho por el dueño el **3 de septiembre de 2026**, con una foto de su teléfono
+—la pantalla de entrar le pedía escribir una orden en la consola—: «por ningún
+motivo pueden salir mensajes que hagan referencia a nada de consola, ni npm start
+ni nada que tenga que ver con código o programación; eso me expone mi trabajo y
+hace que no parezca profesional».
+
+Y **ampliado por él mismo el 4 de septiembre**, con dos que se habían quedado:
+
+- Ajustes → Copias de seguridad le enseñaba **la carpeta del disco** donde se
+  guardan las copias.
+- Ajustes → Este dispositivo tenía una tarjeta «Estado del sistema» cuya primera
+  línea decía **«Servidor: en marcha»**.
+
+Sus palabras: «eso es algo que me interesa a mí como programador y no a mi
+cliente; solo informarle a él sobre lo relacionado con su negocio, nunca
+mencionar nada de servidor ni nada de eso». **Vale para las dos aplicaciones.**
+
+### La regla, en una línea
+
+> En la pantalla solo sale lo que es **del negocio**. Lo de dentro —dónde vive un
+> archivo, si un programa está arrancado, cómo se llama una pieza— no sale nunca.
+
+No es solo cuestión de estética. Un dato así **no le sirve de nada a quien lo
+lee**: no puede ir a esa carpeta, no puede arrancar nada, y si el servidor no
+estuviera en marcha no estaría leyendo la pantalla. Ocupa sitio y quita
+confianza.
+
+### Qué se cambió
+
+- La carpeta de las copias **ya no se manda** desde el servidor. Se quitó del
+  mensaje y también de la respuesta: mientras viaje al aparato, cualquier día
+  alguien vuelve a pintarla.
+- «Estado del sistema» pasa a llamarse **«Lo que hay guardado»** y se le quitó la
+  fila del servidor. Debajo siguen las cifras del negocio, que son las que
+  importan: sitios, productos, movimientos y ventas.
+- Donde se comparaba la versión ya no se dice «en el servidor» sino **«la más
+  reciente»**, y el aviso del teléfono de que hay versión nueva ya no lleva
+  números de versión dentro: quien los necesite los tiene al pie de Ajustes.
+- Juntar dispositivos habla de **«otra copia de la aplicación»**, no de «otro
+  servidor».
+
+### Y una prueba que no deja que vuelva
+
+`pruebas/pantallas.js` ya miraba las palabras de programación (npm, consola,
+sqlite…). Ahora mira además las de **las tripas** —servidor, nginx, pm2— y
+**cualquier ruta del disco**, tanto en los textos de `app.js` como en lo que se
+lee entre etiquetas en `index.html`. Se saltan a propósito las direcciones y los
+identificadores internos, donde esas palabras son parte de un nombre y están
+perfectamente. Y se comprueba aparte que el servidor **no mande** la carpeta de
+las copias, que es por donde entró la primera vez.
+
+---
+
+## 47. Tres cosas que la aplicación no dejaba hacer, y los avisos con su nombre
+
+Pedidas por el dueño el **4 de septiembre de 2026**, seguidas, mientras estrenaba
+la aplicación por dentro.
+
+### Quitar a un trabajador
+
+Hasta hoy solo se le podía **quitar el acceso**, y la lista del personal se
+llenaba de gente que ya no está. Ahora su ficha tiene **«Quitar este
+trabajador»**, debajo del Guardar y separado de él.
+
+Las dos cosas siguen existiendo porque son distintas: **quitar el acceso** es
+para quien se va unos meses y vuelve; **quitarlo** es para quien ya no está. El
+aviso lo dice, por si se pulsa la que no era.
+
+**Se quita en blando.** Su fila se queda con la fecha en que se quitó, porque las
+ventas, los cierres y las comisiones que hizo apuntan a ella: borrarla de verdad
+dejaría el historial diciendo «Sin identificar» donde antes decía su nombre, y
+eso es reescribir lo que pasó (#2). Lo que se ve sí cambia: deja de salir en el
+personal, en el reparto del día y en la puerta de entrada, y **sus sesiones se
+cierran** —si no, el teléfono que dejó abierto seguiría dentro—.
+
+**Dos puertas cerradas, y las dos por lo mismo:** nadie se puede quitar a sí
+mismo, y no se puede quitar al **último administrador** que queda en pie. Sin eso
+se puede dejar el negocio cerrado por dentro, con todos los datos dentro y nadie
+que pueda entrar a arreglarlo.
+
+Quitar un **cargo** ya se podía, y sigue igual: el servidor se niega si alguien lo
+tiene puesto y dice quién. Lo que se arregló es que un trabajador ya quitado no
+bloquee el cargo.
+
+### Exportar lo que se quiera, no siempre lo mismo
+
+«Juntar dispositivos» exportaba siempre lo del sitio en el que se estuviera
+trabajando, y como en Ajustes no hay dónde cambiar de sitio, salía **siempre lo
+del almacén principal**. Ahora hay un desplegable: **todo el negocio** —que es lo
+que contesta a «quiero una copia de todo»— o **un local suelto**, para mandarle a
+un dispositivo solo lo suyo.
+
+El servidor ya sabía hacer las dos cosas desde el primer día; lo que faltaba era
+dónde pedirlo.
+
+### Los avisos, con el nombre de esta aplicación
+
+El aviso del teléfono decía **«Hay 3 cosas nuevas»**, y el de la versión nueva
+soltaba dos números de versión en la barra del teléfono. Ni una cosa ni la otra
+le dicen nada a quien los lee de refilón.
+
+Ahora: **«3 avisos que atender»** con los títulos debajo; el de la versión dice
+**«Hay una versión nueva de D´Padrones»** y explica qué pasa al tocarlo, sin
+números —quien los necesite los tiene al pie de Ajustes y en la tarjeta de la
+Caja—; y el aviso de prueba, al dar permiso, dice **«Avisos activados»** en vez de
+«Listo», que en la barra del teléfono no se sabía de qué era.
+
+El texto de cuando están bloqueados hablaba del **candado de la barra de
+direcciones**, que en una aplicación instalada en el teléfono no existe. Ahora
+manda a los ajustes de notificaciones del teléfono, que es donde se arregla de
+verdad.
+
+### Y «la gente» pasa a ser «el personal»
+
+El apartado de Ajustes ya se llamaba Personal en el índice y **«La gente»** al
+entrar. Se unifica en **Personal**, y con él las líneas que decían «Queda después
+de la gente» y «Esto es dinero para la gente». Es la misma idea escrita como se
+escribe en una oficina.
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía

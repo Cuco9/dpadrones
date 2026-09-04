@@ -158,7 +158,7 @@
     <div class="tarjeta" id="aviso-version" style="display:none">
       <div class="aviso" style="margin:0">
         <b>Hay una versión nueva de la aplicación.</b>
-        Este dispositivo tiene la <b id="version-vieja">—</b> y en el servidor está la
+        Este dispositivo tiene la <b id="version-vieja">—</b> y la más reciente es la
         <b id="version-nueva">—</b>. Se trae en unos segundos y hace falta internet.
         <div class="btnFila" style="margin-top:10px">
           <button class="btn primario" style="flex:1" onclick="traerVersionNueva()">Actualizar ahora</button>
@@ -239,7 +239,7 @@
            si al final del día queda algo (#33). -->
       <div class="fila"><span>− Comisión de los vendedores</span><b class="num" id="v-comision">0 CUP</b></div>
       <div class="fila" id="fila-sueldos"><span>− Salarios y adelantos del día</span><b class="num" id="v-sueldos">0 CUP</b></div>
-      <div class="fila"><span style="font-weight:700">Queda después de la gente</span><b class="num" id="v-queda" style="color:var(--marca-claro)">0 CUP</b></div>
+      <div class="fila"><span style="font-weight:700">Queda después del personal</span><b class="num" id="v-queda" style="color:var(--marca-claro)">0 CUP</b></div>
       <div class="fila"><span>Mermas</span><b class="num" id="v-mermas">0 CUP</b></div>
       <div class="fila"><span>Entradas de mercancía</span><b class="num" id="v-compras">0 CUP</b></div>
       <div class="fila"><span>Traslados (salieron / entraron)</span><b class="num" id="v-traslados">0 / 0</b></div>
@@ -273,7 +273,7 @@
     <div class="btnFila" id="alm-acciones" style="margin-top:0;margin-bottom:12px">
       <button class="btn primario" style="flex:1" data-permiso="gestionar_inventario" onclick="abrirMov('compra')">Entrada</button>
       <button class="btn" style="flex:1" data-permiso="gestionar_inventario" onclick="abrirMov('merma')">Merma</button>
-      <button class="btn acento" style="flex:1" id="btn-despachar" data-permiso="traslados_enviar" onclick="abrirDespacho()">Despachar</button>
+      <button class="btn acento" style="flex:1" id="btn-despachar" data-permiso="traslados_enviar" onclick="abrirDespacho()">Transferencia</button>
     </div>
 
     <div id="transitos"></div>
@@ -316,16 +316,53 @@
       </div>
       <div class="pista" id="alm-valor-nota"></div>
     </div>
-    <!-- Crear un producto se hace AQUÍ, que es la única pantalla donde se ve la
-         mercancía. Antes vivía en una pantalla «Productos» aparte, y eso obligaba
-         a saltar entre dos listas que enseñaban lo mismo. Tocar cualquier fila de
-         arriba abre esa misma ficha para editarla. -->
-    <button class="btn primario ancho" style="margin-bottom:10px" data-permiso="gestionar_productos"
-            onclick="abrirFicha()">
+    <!-- Aquí NO se crean productos: eso vive en el apartado de Productos, que es
+         donde además se les pone local (DECISIONES.md #45). Esta pantalla es la
+         mercancía —lo que hay, lo que entra y lo que sale—, y tocar cualquier fila
+         de arriba abre la ficha del producto para editarla. -->
+    <button class="btn ancho" style="margin-bottom:10px" onclick="imprimirInventario()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Exportar el inventario a PDF</button>
+  </section>
+
+  <!-- ═══ PRODUCTOS ═══ -->
+  <!-- El apartado donde se CREAN los productos y desde donde se les pone local
+       (DECISIONES.md #45). Es la única pantalla donde salen también los que
+       todavía no tienen ninguno: si no salieran aquí no saldrían en ninguna
+       parte, y no habría manera de asignarlos. -->
+  <section id="p-productos" class="pantalla">
+    <div class="buscador">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="busq" placeholder="Buscar por nombre o código…" autocomplete="off">
+    </div>
+    <div class="filtros">
+      <select id="f-cat"><option value="">Todas las categorías</option></select>
+      <select id="f-orden">
+        <option value="alfa">A-Z</option>
+        <option value="codigo">Por código</option>
+        <option value="caro">Más caro primero</option>
+        <option value="barato">Más barato primero</option>
+      </select>
+    </div>
+    <!-- De quién es cada producto (#45). Solo lo ve quien mira el negocio entero,
+         porque solo desde el almacén principal se tiene delante el catálogo de
+         todos. Con «Todavía sin local» se sacan de golpe los que quedan por
+         repartir. -->
+    <div class="filtros" id="f-local-caja" data-permiso="ver_negocio_entero">
+      <select id="f-local">
+        <option value="">De cualquier local</option>
+      </select>
+    </div>
+    <div class="pista" id="f-local-pista" data-permiso="ver_negocio_entero"
+         style="margin:-6px 0 10px">Los que están <b>«todavía sin local»</b> solo salen
+      en esta pantalla, hasta que les pongas uno.</div>
+    <div class="tarjeta">
+      <h2><span id="cuenta">0 productos</span></h2>
+      <div id="lista"></div>
+    </div>
+    <button class="btn ancho" style="margin-bottom:10px" onclick="imprimirCatalogo()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Exportar el catálogo a PDF</button>
+    <button class="btn primario ancho" data-permiso="gestionar_productos" onclick="abrirFicha()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
       Nuevo producto
     </button>
-    <button class="btn ancho" style="margin-bottom:10px" onclick="imprimirInventario()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Exportar el inventario a PDF</button>
   </section>
 
   <!-- ═══ DINERO ═══ -->
@@ -523,7 +560,7 @@
       </div>
       <div class="ajIndice" data-sec="dispositivo" onclick="abrirAjustes('dispositivo')">
         <div class="nm">Este dispositivo</div>
-        <div class="sub">Versión, sello de la empresa y estado del sistema</div>
+        <div class="sub">Versión, sello de la empresa y un resumen de lo guardado</div>
       </div>
     </div>
 
@@ -676,10 +713,10 @@
     </details>
     </div><!-- fin de El negocio -->
 
-    <!-- ═══ LA GENTE ═══ -->
+    <!-- ═══ EL PERSONAL ═══ -->
     <div class="ajSec" id="aj-gente" style="display:none">
     <div class="ajCab"><button class="btn" onclick="volverAjustes()">← Ajustes</button>
-      <h2>La gente</h2></div>
+      <h2>Personal</h2></div>
 
     <!-- Sin data-permiso a propósito: esto lo tiene que ver TODO el mundo, que
          de eso se trata. Cada uno se cambia el suyo y nadie más. -->
@@ -740,7 +777,7 @@
         cobró y el botón de pagarle están en <b>Dinero → Comisiones</b>. Aquí se decide
         <b>en qué moneda</b> cobra cada uno: toca su nombre arriba.</div>
     </div>
-    </div><!-- fin de La gente -->
+    </div><!-- fin de Personal -->
 
     <!-- ═══ COPIAS Y DISPOSITIVOS ═══ -->
     <div class="ajSec" id="aj-copias" style="display:none">
@@ -752,16 +789,16 @@
          confiar el día que hace falta. -->
     <div class="tarjeta" data-permiso="copias">
       <h2>Copias de seguridad</h2>
-      <div class="pista" id="sa-nota">La aplicación guarda una copia entera de la base de
-        datos sola, al arrancar y cada pocas horas.</div>
+      <div class="pista" id="sa-nota">La aplicación guarda una copia entera de toda la
+        información, ella sola, al arrancar y cada pocas horas.</div>
       <div id="sa-lista"></div>
       <div class="btnFila">
         <button class="btn" style="flex:1" onclick="salvarAhora()">Salvar ahora</button>
         <button class="btn" style="flex:1" onclick="bajarUltimaSalva()">Descargar la última</button>
       </div>
-      <div class="pista">Guarda de vez en cuando una copia <b>fuera de esta máquina</b> —en un
-        teléfono, en una memoria—: una copia que vive en el mismo disco que el original no
-        salva de que ese disco se rompa.</div>
+      <div class="pista">Guarda de vez en cuando una copia <b>fuera de la aplicación</b> —en
+        un teléfono, en una memoria—: una copia que vive en el mismo sitio que el original
+        no salva del día en que se pierda ese sitio.</div>
     </div>
 
     <!-- ═══ BORRAR DATOS ═══
@@ -797,8 +834,14 @@
          pedirle a alguien que se equivoque. -->
     <div class="tarjeta" data-permiso="sincronizar">
       <h2>Juntar dispositivos</h2>
-      <div class="fila"><span>Se exporta lo de</span><b id="sy-sitio">—</b></div>
-      <div class="fila"><span>Contiene</span><b class="num" id="sy-tengo">—</b></div>
+      <!-- QUÉ SE EXPORTA. Antes se exportaba siempre lo del sitio en el que se
+           estuviera trabajando, y como en Ajustes no hay dónde cambiarlo, salía
+           siempre lo del almacén principal. Ahora se elige: el negocio entero —que
+           es lo que hace falta para tener una copia de todo— o un local suelto,
+           para mandarle a un dispositivo solo lo suyo. -->
+      <label class="lbl">Qué exportar</label>
+      <select id="sy-que"></select>
+      <div class="fila"><span>En total hay</span><b class="num" id="sy-tengo">—</b></div>
       <div class="btnFila">
         <button class="btn primario" style="flex:1" onclick="exportarPaquete()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="M7 11l5 5 5-5"/><path d="M4 21h16"/></svg>
@@ -811,13 +854,14 @@
       </div>
       <input type="file" id="sy-archivo" accept=".json,.qs" style="display:none" onchange="importarPaquete(event)">
       <div class="pista">El archivo lleva el inventario, las ventas, los cierres y el dinero
-        de ese sitio, más el catálogo entero. Al importarlo se <b>suma</b>: lo que ya esté
-        se queda igual y solo se añade lo que falte. Da igual cuántas veces lo hagas.</div>
+        de lo que hayas elegido, más el catálogo entero. Con <b>todo el negocio</b> va todo
+        lo que hay en la aplicación. Al importarlo se <b>suma</b>: lo que ya esté se queda
+        igual y solo se añade lo que falte. Da igual cuántas veces lo hagas.</div>
       <div id="sy-resultado"></div>
 
       <details style="margin-top:14px">
         <summary style="font-size:12.5px;color:var(--texto3);cursor:pointer;font-weight:650">
-          Sincronizar por red con otro servidor</summary>
+          Sincronizar por red con otra copia de la aplicación</summary>
         <div class="pista">Para cuando haya internet o estés en el WiFi del almacén. Hace lo
           mismo que el archivo, pero solo con lo nuevo desde la última vez.</div>
         <input type="text" id="sy-url" placeholder="http://192.168.1.50:3010 o https://…">
@@ -830,9 +874,9 @@
           <button class="btn acento" style="flex:2" id="btn-sync" onclick="sincronizarAhora()">Sincronizar ahora</button>
         </div>
         <div id="sy-historial"></div>
-        <div class="pista">La primera vez que se habla con otro servidor se apunta su sello y
-          después solo se acepta ese. Si esa copia se reinstaló desde cero, su sello es otro y
-          hay que olvidar el viejo a mano.</div>
+        <div class="pista">La primera vez que se habla con otra copia se apunta su sello y
+          después solo se acepta ese. Si esa copia se instaló de nuevo desde cero, su sello es
+          otro y hay que olvidar el viejo a mano.</div>
         <button class="btn" style="width:100%" onclick="olvidarSello()">Olvidar el sello apuntado</button>
         <div class="fila" style="border:0;padding-top:10px"><span style="font-size:12px;color:var(--texto3)">Esta instalación</span>
           <b id="sy-id" style="font-size:11px;font-family:ui-monospace,monospace;color:var(--texto3)">—</b></div>
@@ -852,8 +896,8 @@
         y la aplicación no puede trabajar sin internet.</div>
       <a class="btn acento" style="width:100%;display:block;text-align:center;text-decoration:none"
          href="/sello" target="_blank" rel="noopener">Abrir las instrucciones del sello</a>
-      <div class="pista">En el dispositivo nuevo, escribir la dirección de este servidor <b>sin la
-        «s»</b> (http://…) y saldrán solas.</div>
+      <div class="pista">En el dispositivo nuevo, escribir la dirección de la aplicación <b>sin
+        la «s»</b> (http://…) y saldrán solas.</div>
     </div>
 
 
@@ -867,7 +911,7 @@
         <span>En este dispositivo</span><b class="num" id="ver-sw2">—</b>
       </div>
       <div class="fila">
-        <span>En el servidor</span><b class="num" id="ver-servidor">—</b>
+        <span>La más reciente</span><b class="num" id="ver-servidor">—</b>
       </div>
       <div id="ver-aviso"></div>
       <button class="btn ancho" style="margin-top:10px" onclick="buscarActualizacion()">
@@ -877,9 +921,12 @@
         Hace falta internet.</div>
     </div>
 
+    <!-- Aquí sale lo que hay guardado del NEGOCIO, y nada más. Tenía encima una
+         fila que decía si el servidor estaba en marcha: eso no es asunto de quien
+         usa la aplicación —si no estuviera en marcha no estaría leyendo esto—, y
+         nombrar las tripas en la pantalla de un cliente no ayuda a nadie. -->
     <div class="tarjeta">
-      <h2>Estado del sistema</h2>
-      <div class="fila"><span>Servidor</span><b id="e-srv">comprobando…</b></div>
+      <h2>Lo que hay guardado</h2>
       <div class="fila"><span>Sitios</span><b class="num" id="e-sitios">—</b></div>
       <div class="fila"><span>Productos</span><b class="num" id="e-prods">—</b></div>
       <div class="fila"><span>Movimientos</span><b class="num" id="e-movs">—</b></div>
@@ -907,6 +954,10 @@
   <button data-p="almacen" onclick="irA('almacen',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v10a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M9 21V12h6v9"/></svg>
     Almacén
+  </button>
+  <button data-p="productos" data-permiso="ver_catalogo" onclick="irA('productos',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
+    Productos
   </button>
   <button data-p="dinero" data-permiso="ver_fondo,ver_informes,ver_inversiones,ver_comisiones" onclick="irA('dinero',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
@@ -1007,7 +1058,7 @@
     <!-- EL BULTO (DECISIONES.md #44). El almacén cuenta por cajas o por sacos y
          las tiendas por unidades, y es el mismo producto: por dentro todo son
          unidades siempre. Esto solo dice cuántas trae un bulto, para poder
-         escribir «3 cajas» al despachar y para poder leer «240 (10 cajas)». -->
+         escribir «3 cajas» al transferir y para poder leer «240 (10 cajas)». -->
     <div class="pista" id="f-um-pista" style="margin-top:-4px">La existencia se cuenta en esto,
       y el precio de venta es el de <b>una</b> de estas. Si el saco de arroz lo vendes por
       libras, elige <b>Libras</b>.</div>
@@ -1080,6 +1131,20 @@
     <label class="lbl">Alerta de stock bajo</label>
     <input type="number" id="f-stockmin" placeholder="0" inputmode="decimal">
 
+    <!-- De qué local es el producto (DECISIONES.md #45). Solo lo ve quien mira el
+         negocio entero: quien despacha en una tienda crea lo suyo y no tiene por
+         qué decidir de quién es, ni poder regalárselo a otro local sin querer. -->
+    <div data-permiso="ver_negocio_entero">
+      <label class="lbl">Este producto es de</label>
+      <select id="f-sitio" onchange="alCambiarLocalDeLaFicha()"></select>
+      <div class="pista">Se ve en <b>ese</b> local y en cualquiera que haya tenido
+        mercancía suya. El almacén principal los ve todos.<br>
+        Se puede dejar en <b>«todavía sin local»</b> y ponérselo después. Mientras no
+        lo tenga, el producto sale <b>solo en Productos</b>: no aparece en la caja, ni
+        en el almacén, ni se le puede meter mercancía. En cuanto le pongas local,
+        empieza a trabajar.</div>
+    </div>
+
     <!-- El stock no se guarda en ninguna columna: es la suma de los movimientos
          (DECISIONES.md #1). Esta casilla NO lo guarda tampoco — pregunta cuánto
          hay y la aplicación apunta por dentro la ENTRADA, exactamente la misma
@@ -1089,7 +1154,7 @@
          Solo sale al CREAR: en un producto que ya existe, escribir la existencia
          a mano sería pisar el historial en vez de apuntar lo que pasó (#2). -->
     <div id="f-existencia-caja" style="display:none">
-      <label class="lbl">¿Cuánto tienes ahora?</label>
+      <label class="lbl">Stock</label>
       <input type="number" id="f-existencia" placeholder="0" inputmode="decimal">
       <div class="pista" id="f-existencia-pista"></div>
     </div>
@@ -1124,6 +1189,14 @@
     <label class="lbl">Precio distinto en algún sitio</label>
     <div id="ficha-precios"></div>
     <div class="pista">Déjalo vacío y ese sitio usa el precio general.</div>
+
+    <!-- Duplicar (DECISIONES.md #45): abre otra ficha con todo lo de este dentro
+         para crear uno parecido. No guarda nada: el producto nuevo no nace hasta
+         que se pulsa Guardar.
+         Va en su propia línea y no en la fila de abajo: tres botones seguidos no
+         caben en el ancho de un teléfono. -->
+    <button class="btn ancho" id="btn-duplicar" style="display:none;margin-top:15px"
+            onclick="duplicarProducto()">Duplicar este producto</button>
 
     <div class="btnFila">
       <button class="btn primario" style="flex:2" onclick="guardarProducto()">Guardar</button>
@@ -1301,8 +1374,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
     <h3>Avisos</h3>
-    <div class="pista">Lo que está esperando a que alguien lo atienda. Desaparece solo
-      cuando se atiende, aquí o en otro dispositivo.</div>
+    <div class="pista">Lo que está esperando a que alguien lo atienda. Cada aviso
+      desaparece solo cuando deja de haber motivo: se repone la mercancía, o se
+      actualiza la aplicación.</div>
     <div id="av-lista"></div>
 
     <!-- El permiso del navegador SOLO se pide con un botón. Pedirlo al abrir la
@@ -1310,13 +1384,13 @@
          entonces ya no hay forma de volver a preguntarlo. -->
     <div id="av-permiso" style="display:none;margin-top:14px">
       <button class="btn ancho" onclick="pedirPermisoAvisos()">
-        Avisarme también con el aviso del teléfono</button>
+        Avisarme también en la pantalla del teléfono</button>
       <div class="pista">Sale arriba, con sonido, aunque estés en otra pantalla de la
         aplicación. Hace falta que la aplicación esté abierta.</div>
     </div>
     <div id="av-permiso-no" class="pista" style="display:none;margin-top:14px">
-      Los avisos del teléfono están <b>bloqueados</b> para esta dirección. Se vuelven a
-      permitir desde el candado de la barra de direcciones del navegador.
+      Los avisos del teléfono están <b>bloqueados</b> para esta aplicación. Se vuelven a
+      permitir en los ajustes del teléfono, en las notificaciones de D´Padrones.
     </div>
   </div>
 </div>
@@ -1466,13 +1540,13 @@
   </div>
 </div>
 
-<!-- ═══ DESPACHAR ═══ -->
+<!-- ═══ TRANSFERENCIA ═══ -->
 <div class="velo" id="velo-despacho" onclick="if(event.target===this)cerrarDespacho()">
   <div class="modal">
     <button class="cerrar" onclick="cerrarDespacho()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
-    <h3>Despachar mercancía</h3>
+    <h3>Transferir mercancía</h3>
     <div class="pista">Sale del inventario de aquí ahora mismo. Entrará en el destino
       cuando allí confirmen lo que recibieron.</div>
 
@@ -1489,7 +1563,7 @@
     <input type="text" id="des-obs" placeholder="Ej: pedido semanal">
 
     <div class="btnFila">
-      <button class="btn primario ancho" onclick="guardarDespacho()">Despachar</button>
+      <button class="btn primario ancho" onclick="guardarDespacho()">Transferir</button>
     </div>
   </div>
 </div>
@@ -1502,8 +1576,8 @@
     </button>
     <h3>Confirmar lo que recibiste</h3>
     <div class="pista">Cuenta la mercancía y corrige la cantidad si llegó menos.
-      Lo que falte queda registrado como faltante en tránsito, y el despacho del
-      almacén no se toca.</div>
+      Lo que falte queda registrado como faltante en tránsito, y la transferencia
+      del almacén no se toca.</div>
     <div id="rec-lineas"></div>
     <div class="btnFila">
       <button class="btn primario ancho" onclick="guardarRecepcion()">Confirmar recepción</button>
@@ -1670,7 +1744,7 @@
       <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer">
         <input type="checkbox" id="fo-es-gente" style="width:auto;margin:0"
                onchange="alMarcarGente()">
-        Esto es dinero para la gente (salario, adelanto)
+        Esto es dinero para el personal (salario, adelanto)
       </label>
       <div class="pista">Si lo marcas, se resta de la ganancia en el cierre y en los
         resúmenes. Las comisiones ya se restan solas: no hace falta marcarlas aquí.</div>
@@ -1865,6 +1939,13 @@
     <div class="btnFila">
       <button class="btn primario ancho" onclick="guardarPersona()">Guardar</button>
     </div>
+    <!-- Quitar a un trabajador. Va en su propia línea y debajo, separado del
+         Guardar: es lo último que se hace y no se puede tocar sin querer.
+         Quitar el acceso y quitar al trabajador son cosas distintas y las dos
+         hacen falta: la de arriba es para quien se va unos meses, esta para quien
+         ya no está. -->
+    <button class="btn peligro ancho" id="pe-borrar" style="display:none;margin-top:8px"
+      onclick="eliminarPersona()">Quitar este trabajador</button>
   </div>
 </div>
 

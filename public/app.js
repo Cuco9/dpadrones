@@ -13,6 +13,10 @@ let editando = null;      // id del producto abierto en la ficha, o null si es n
 // producto le borraría la foto, porque el catálogo ya no la trae para devolverla.
 let fotoActual = null;
 let FICHA_PRODUCTO = null;   // el producto que se está editando, para su foto
+// Si la ficha abierta va a CREAR un producto —uno en blanco o una copia—. No es lo
+// mismo que «editando === null» a la hora de leerlo desde el desplegable del local,
+// que se toca con la ficha ya abierta.
+let fichaNaciendo = false;
 
 let YO = null;            // { persona, cargo, permisos }
 let PERMISOS_POSIBLES = [];
@@ -103,7 +107,7 @@ async function api(ruta, opciones) {
     // puerta se cierra por falta de permiso, el servidor dice cuál falta y de qué
     // cargo, y con eso se le puede ofrecer al administrador dárselo en el momento
     // (DECISIONES.md #35). Perdiendo el cuerpo, quedaría solo la frase.
-    const e = new Error(cuerpo.error || ('el servidor respondió ' + r.status));
+    const e = new Error(cuerpo.error || ('no se pudo completar (' + r.status + ')'));
     e.datos = cuerpo;
     e.status = r.status;
     // Si la puerta se cerró por un permiso, se apunta para poder ofrecerlo en la
@@ -148,6 +152,10 @@ function irA(pantalla, btn) {
   if (pantalla === 'ajustes') { volverAjustes(); cargarEstado(); cargarPersonal(); cargarSync(); cargarTasa(); pintarMarca(); cargarSalvas(); cargarBorrado(); mirarVersiones(); }
   if (pantalla === 'ventas') cargarDia();
   if (pantalla === 'almacen') cargarAlmacen();
+  // Productos no pide nada al servidor: pinta el catálogo que ya está cargado. Se
+  // repinta al entrar porque puede haber cambiado desde la última vez —un producto
+  // creado en otra pantalla, un traslado recibido, un cambio de local—.
+  if (pantalla === 'productos') renderLista();
   if (pantalla === 'dinero') cargarFondo();
   if (pantalla === 'caja') { renderResultados(); setTimeout(() => $('caja-busq').focus(), 80); }
 }
@@ -255,6 +263,7 @@ async function cargarCatalogo() {
     cargarClientes();
     await cargarStock();
     renderCarro();
+    renderLista();
     // La rejilla de la caja se dibuja AQUI. Antes solo se rehacia al escribir en
     // el buscador, asi que al entrar la pantalla estaba vacia.
     renderResultados();
@@ -338,10 +347,10 @@ function pistaDelBulto() {
   // una palabra que escribe el dueño y que puede ser cualquiera.
   const enBultos = $('f-caja-sel') && !!$('f-caja-sel').value;
   caja.innerHTML = !enBultos
-    ? 'Se cuenta y se despacha en <b>' + esc(enPlural(um)) + '</b>.'
+    ? 'Se cuenta y se transfiere en <b>' + esc(enPlural(um)) + '</b>.'
     : (por > 0
       ? 'Cada <b>' + esc(nombre) + '</b> trae <b>' + por + ' ' +
-        esc(por === 1 ? um : enPlural(um)) + '</b>. Al apuntar una entrada o un despacho ' +
+        esc(por === 1 ? um : enPlural(um)) + '</b>. Al apuntar una entrada o una transferencia ' +
         'podrás escribir en ' + esc(enPlural(nombre)) + ', y la aplicación guarda ' +
         'las ' + esc(enPlural(um)) + '. <b>La existencia siempre se cuenta en ' +
         esc(enPlural(um)) + '.</b>'
@@ -386,21 +395,133 @@ const bultosEscritos = (p, cuantos) => {
          (por ? ' de ' + por : '');
 };
 
-// Las categorías que existen, para el desplegable de la caja y para la lista de
-// sugerencias de la ficha del producto. El del almacén se rellena aparte, al
+// Las categorías que existen, para Productos, para el desplegable de la caja y
+// para la lista de sugerencias de la ficha. El del almacén se rellena aparte, al
 // entrar en esa pantalla.
 function rellenarCategorias() {
-  const cats = [...new Set(PRODUCTOS.map(p => p.categoria).filter(Boolean))].sort();
+  // Las categorías salen de lo que se ve en cada pantalla (#45): un desplegable
+  // con «Refrescos» dentro que al elegirlo deja la lista vacía no sirve para nada.
+  //
+  // Y por eso son DOS listas y no una: en el apartado de Productos también están
+  // los que todavía no tienen local, y en la caja no. Con una sola lista, la caja
+  // acabaría ofreciendo una categoría cuyos productos no se pueden vender.
+  const cats = [...new Set(productosDelApartado().map(p => p.categoria).filter(Boolean))].sort();
+  const catsCaja = [...new Set(productosAqui().map(p => p.categoria).filter(Boolean))].sort();
+  const sel = $('f-cat');
+  if (sel) { const antes = sel.value;
+    sel.innerHTML = '<option value="">Todas las categorías</option>' +
+      cats.map(c => `<option>${esc(c)}</option>`).join('');
+    sel.value = antes; }
   $('lista-cats').innerHTML = cats.map(c => `<option>${esc(c)}</option>`).join('');
   const cj = $('caja-cat');
   if (cj) { const a = cj.value;
-    cj.innerHTML = '<option value="">Todo</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
+    cj.innerHTML = '<option value="">Todo</option>' +
+      catsCaja.map(c => `<option>${esc(c)}</option>`).join('');
     cj.value = a; }
+  rellenarLocalesDelCatalogo();
 }
+
+// De quién es cada producto, para poder ir repartiéndolos (DECISIONES.md #45).
+// Solo sirve —y solo se ve— desde el almacén principal, que es el único que tiene
+// delante el catálogo entero: en una tienda todos los que se ven son suyos o los
+// ha tenido, y filtrar por local no diría nada.
+//
+// «Todavía sin local» es la razón de ser de este filtro: es la lista de lo que
+// queda por repartir, y sin ella habría que buscarlos de uno en uno entre todos.
+function rellenarLocalesDelCatalogo() {
+  const sel = $('f-local');
+  if (!sel) return;
+  const antes = sel.value;
+  sel.innerHTML = '<option value="">De cualquier local</option>' +
+    '<option value="sin">Todavía sin local</option>' +
+    SITIOS.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join('');
+  sel.value = antes;
+  if (sel.value !== antes) sel.value = '';   // el local se apagó: se vuelve a todos
+}
+
+// El filtro por local de Productos (#45). Vive en una función porque lo miran dos
+// sitios —la lista y el PDF— y dos copias parecidas son dos copias que un día
+// dejan de coincidir: el papel diría otra cosa que la pantalla desde la que se
+// pidió.
+function deEsteLocal(lista) {
+  const sel = $('f-local'), v = sel ? sel.value : '';
+  if (!v) return lista;
+  // «Sin local» es exactamente lo que dice: no tiene local. También los pocos que
+  // además tienen mercancía en algún sitio —a los que se les quitó el local
+  // después—, porque son justo los que hay que repartir y esconderlos aquí sería
+  // esconderlos en la única pantalla desde la que se les puede poner uno.
+  return lista.filter(p => v === 'sin' ? !p.sitio_id : p.sitio_id === v);
+}
+const nombreDelFiltroLocal = () => {
+  const sel = $('f-local'), v = sel ? sel.value : '';
+  if (!v) return '';
+  return v === 'sin' ? 'todavía sin local'
+    : 'del local ' + ((SITIOS.find(x => x.id === v) || {}).nombre || '');
+};
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// ─── La lista del apartado de Productos ───────────────────────
+// Es el catálogo: qué productos existen, cómo son y de quién son. Lo que HAY de
+// cada uno se mira en el Almacén, que es otra pregunta (#22).
+function renderLista() {
+  if (!$('lista')) return;
+  const q = ($('busq').value || '').trim().toLowerCase();
+  const cat = $('f-cat').value;
+  const orden = $('f-orden').value;
+
+  // Esta pantalla ES el apartado de Productos (#45): aquí, y solo aquí, salen
+  // también los que todavía no tienen local.
+  const aqui = productosDelApartado();
+  let lista = aqui;
+  if (cat) lista = lista.filter(p => p.categoria === cat);
+  lista = deEsteLocal(lista);
+  if (q) {
+    // Busca por nombre, por el código de la app y por el del fabricante: se teclea
+    // lo que se tenga a mano.
+    lista = lista.filter(p =>
+      (p.nombre || '').toLowerCase().includes(q) ||
+      (p.codigo || '').toLowerCase().includes(q) ||
+      (p.codigo_barra || '').toLowerCase().includes(q) ||
+      (p.categoria || '').toLowerCase().includes(q));
+  }
+  if (orden === 'alfa') lista.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  else if (orden === 'codigo') lista.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''));
+  else if (orden === 'caro') lista.sort((a, b) => b.precio - a.precio);
+  else if (orden === 'barato') lista.sort((a, b) => a.precio - b.precio);
+
+  $('cuenta').textContent = lista.length === aqui.length
+    ? lista.length + (lista.length === 1 ? ' producto' : ' productos')
+    : lista.length + ' de ' + aqui.length;
+
+  $('lista').innerHTML = lista.length ? lista.map(p => {
+    const excep = (p.precios || []).length;
+    const sub = [p.categoria, p.um !== 'Unidad' ? p.um : null,
+                 p.unidades_por_caja > 0 ? rotuloBulto(p) : null,
+                 excep ? excep + (excep === 1 ? ' precio especial' : ' precios especiales') : null,
+                 // Que se vea de un vistazo cuáles quedan por repartir (#45), y se
+                 // le dice a todo el mundo: es lo que explica por qué ese producto
+                 // no sale en la caja ni en el almacén.
+                 !p.sitio_id ? 'todavía sin local' : null]
+                .filter(Boolean).join(' · ');
+    return `<div class="prod" onclick="abrirFicha('${p.id}')">
+      ${p.tiene_foto ? `<img class="miniFoto" src="${fotoDe(p)}" alt="" loading="lazy">`
+               : `<span class="cod">${esc(p.codigo)}</span>`}
+      <div class="info">
+        <div class="nm">${esc(p.nombre)}${p.tiene_foto ? ' <span style="font-size:10.5px;color:var(--texto3)">' + esc(p.codigo) + '</span>' : ''}</div>
+        ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
+      </div>
+      <div class="pre"><b class="num">${dinero(p.precio, p.precio_moneda || 'CUP')}</b>
+        ${p.costo === null ? ''
+          : `<span${costoRaro(p) ? ' style="color:var(--rojo);font-weight:700"' : ''}>costo ${
+              enBase(p.costo)}</span>`}</div>
+      <span class="accIco editar" title="Tocar para editar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></span>
+    </div>`;
+  }).join('') : `<div class="vacio">${q || cat ? 'Ningún producto coincide con la búsqueda.' :
+      'Todavía no hay productos.<br>Empieza creando el primero.'}</div>`;
 }
 
 // Un costo que se sale de madre. Casi siempre es el mismo accidente: el costo
@@ -478,26 +599,41 @@ const fotoDe = p => !p || !p.tiene_foto ? ''
   : '/foto-producto/' + p.id + '?v=' + encodeURIComponent(p.actualizado || '');
 
 // ─── Ficha del producto ───────────────────────────────────────
-function abrirFicha(id) {
-  editando = id || null;
+// 'copiar' abre la ficha de un producto que ya existe, pero para crear OTRO con
+// lo suyo dentro (DECISIONES.md #45). Se rellena exactamente igual: lo único que
+// cambia es que al guardar nace un producto nuevo en vez de cambiar este.
+function abrirFicha(id, copiar) {
+  editando = copiar ? null : (id || null);
   const p = id ? PRODUCTOS.find(x => x.id === id) : null;
+  const naciendo = !editando;      // uno en blanco, o una copia: todavía no existe
 
-  $('ficha-titulo').textContent = p ? 'Editar producto' : 'Nuevo producto';
-  $('ficha-codigo-caja').style.display = p ? 'block' : 'none';
+  $('ficha-titulo').textContent = copiar ? 'Copia de un producto'
+    : (p ? 'Editar producto' : 'Nuevo producto');
+  // El código de la aplicación lo pone el servidor al crear: en una copia todavía
+  // no hay ninguno que enseñar, y enseñar el del original sería mentir.
+  $('ficha-codigo-caja').style.display = naciendo ? 'none' : 'block';
   if (p) $('ficha-codigo').textContent = p.codigo;
-  $('btn-borrar').style.display = p ? 'inline-flex' : 'none';
+  $('btn-borrar').style.display = naciendo ? 'none' : 'inline-flex';
+  $('btn-duplicar').style.display = (!naciendo && puedo('gestionar_productos'))
+    ? '' : 'none';
 
   // El producto que se está editando, para poder pintar la foto que ya tiene: el
   // catálogo ya no la trae dentro.
   FICHA_PRODUCTO = p;
   // 'undefined' = no se ha tocado. Al guardar no se manda y el servidor deja la que
   // haya. En un producto nuevo no hay ninguna, así que es null desde el principio.
-  fotoActual = p ? undefined : null;
+  // En una copia se empieza sin foto y la del original se trae aparte, porque ya
+  // no viaja dentro del catálogo (#36): hay que ir a buscarla.
+  fotoActual = (p && !copiar) ? undefined : null;
   pintarFoto();
-  $('f-nombre').value = p ? p.nombre : '';
+  // El nombre lleva «(copia)» para que no queden dos iguales si alguien guarda sin
+  // mirar. Se abre seleccionado, así se escribe encima del tirón.
+  $('f-nombre').value = !p ? '' : (copiar ? p.nombre + ' (copia)' : p.nombre);
   $('f-cat-in').value = p ? p.categoria : '';
   ponerListasDelProducto(p);
-  $('f-codbarra').value = p ? (p.codigo_barra || '') : '';
+  // El código del fabricante es el que ESE producto trae impreso en la caja, y no
+  // es el mismo del que se le parece: en una copia se deja en blanco a propósito.
+  $('f-codbarra').value = (p && !copiar) ? (p.codigo_barra || '') : '';
   $('f-costo').value = p ? p.costo : '';
   $('f-costorepo').value = p && p.costo_repo > 0 ? p.costo_repo : '';
   // Siempre se abre en CUP: lo guardado está en pesos, y enseñarlo en dólares
@@ -510,18 +646,25 @@ function abrirFicha(id) {
   $('f-stockmin').value = p ? p.stock_min : '';
   // (la unidad y el bulto los pone ponerListasDelProducto, más arriba)
 
+  // De qué local es (#45). Al crear uno en blanco se propone el local en el que se
+  // está trabajando, que es lo que quiere decir «lo estoy creando aquí». Al editar
+  // o al copiar, el que tenga; y si no tiene ninguno, se queda en «todavía sin
+  // local», que es una respuesta de verdad y no un hueco sin rellenar: el dueño
+  // mete el catálogo de una tanda y les va poniendo local después.
+  if ($('f-sitio')) {
+    $('f-sitio').innerHTML =
+      '<option value="">Todavía sin local — se lo pongo después</option>' +
+      SITIOS.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
+    $('f-sitio').value = p ? (p.sitio_id || '') : sitioActual();
+  }
+
   // La existencia inicial solo se pregunta al CREAR, y solo a quien puede mover
   // mercancía: apuntarla es registrar una entrada, y eso tiene su propio permiso.
   // Quien solo lleva el catálogo no ve la casilla, porque el servidor le
   // rechazaría la entrada cuando el producto ya estuviera creado.
-  const puedeExistencia = !p && puedo('gestionar_inventario');
-  $('f-existencia-caja').style.display = puedeExistencia ? 'block' : 'none';
+  fichaNaciendo = naciendo;
   $('f-existencia').value = '';
-  if (puedeExistencia) {
-    const donde = (SITIOS.find(s => s.id === sitioActual()) || {}).nombre || 'este sitio';
-    $('f-existencia-pista').innerHTML = 'Se apunta como entrada de mercancía en <b>' +
-      esc(donde) + '</b>, al costo de arriba. Déjalo vacío si todavía no ha llegado.';
-  }
+  alCambiarLocalDeLaFicha();
   $('f-comision').value = p && p.comision > 0 ? p.comision : '';
   $('f-comision-tipo').value = p ? String(p.comision_pct || 0) : '0';
   // Se abre en la moneda del negocio porque lo guardado ESTÁ en esa moneda.
@@ -548,6 +691,31 @@ function abrirFicha(id) {
 function cerrarFicha() {
   $('velo-ficha').classList.remove('abierto');
   editando = null;
+}
+
+// En qué local nace el producto. Quien no elige local —porque no tiene el permiso
+// de ver el negocio entero— lo crea en el suyo, que es donde está trabajando.
+function localDeLaFicha() {
+  const sel = $('f-sitio');
+  return (puedo('ver_negocio_entero') && sel) ? sel.value : sitioActual();
+}
+
+// LA CASILLA DE «¿CUÁNTO TIENES AHORA?» VA PEGADA AL LOCAL (#45). La mercancía
+// tiene que estar EN algún sitio, y un producto que se deja «todavía sin local» no
+// tiene dónde meterla: por eso no suma en ninguna parte. Así que la pregunta
+// aparece y desaparece con el local elegido, y dice en cuál va a entrar.
+//
+// Sin esto, meter el catálogo de una tanda —que es para lo que existe «todavía sin
+// local»— apuntaría cada existencia en el local donde se esté parado, y el
+// producto acabaría viéndose allí de todas formas, por sus movimientos.
+function alCambiarLocalDeLaFicha() {
+  const donde = localDeLaFicha();
+  const puedeExistencia = fichaNaciendo && puedo('gestionar_inventario') && !!donde;
+  $('f-existencia-caja').style.display = puedeExistencia ? 'block' : 'none';
+  if (!puedeExistencia) return;
+  const nombre = (SITIOS.find(s => s.id === donde) || {}).nombre || 'este sitio';
+  $('f-existencia-pista').innerHTML = 'Se apunta como entrada de mercancía en <b>' +
+    esc(nombre) + '</b>, al costo de arriba. Déjalo vacío si todavía no ha llegado.';
 }
 
 async function guardarProducto() {
@@ -602,6 +770,17 @@ async function guardarProducto() {
       .filter(x => x.precio === null || x.precio > 0)
   };
 
+  // De qué local es (DECISIONES.md #45). El desplegable solo lo tiene delante quien
+  // ve el negocio entero; quien no, no manda el campo, y no mandarlo significa
+  // «déjalo donde está». Para él eso es justo lo que tiene que pasar: si se mandara
+  // vacío, guardarle el precio a un producto lo dejaría sin local.
+  //
+  // Y vacío SÍ es una respuesta —«todavía sin local»—, así que lo que se mira es si
+  // el desplegable está delante, no si tiene algo escrito.
+  const eligeLocal = puedo('ver_negocio_entero') && !!$('f-sitio');
+  if (eligeLocal) cuerpo.sitio_id = $('f-sitio').value;
+  else if (!editando) cuerpo.sitio_id = sitioActual();
+
   try {
     if (editando) {
       await api('/api/productos/' + editando, { method: 'PUT', body: JSON.stringify(cuerpo) });
@@ -611,7 +790,8 @@ async function guardarProducto() {
       // La existencia con la que nace el producto es una ENTRADA, no un campo
       // suyo (#1), y va después de crearlo porque hasta aquí no hay a qué
       // producto apuntarla.
-      const aviso = await apuntarExistenciaInicial(r.id, cuerpo.costo, existencia);
+      const aviso = await apuntarExistenciaInicial(r.id, cuerpo.costo, existencia,
+                                                   localDeLaFicha());
       // Sin impresora, este código hay que escribirlo a mano en el producto. Si
       // solo saliera en un aviso que se va solo, habría que buscarlo después.
       cerrarFicha();
@@ -645,13 +825,16 @@ function existenciaEscrita() {
 // tragarse el fallo dejaría el inventario diciendo cero con la mercancía en el
 // estante. Pasa de verdad cuando la jornada de ese sitio ya está cerrada, o
 // cuando se cae el internet entre las dos peticiones.
-async function apuntarExistenciaInicial(productoId, costoBase, cantidad) {
-  if (!(cantidad > 0)) return null;
-  const donde = (SITIOS.find(s => s.id === sitioActual()) || {}).nombre || 'el sitio';
+// La entrada va al local del PRODUCTO, no al que se esté mirando: desde el almacén
+// principal se crean cosas que son de una tienda, y meterlas en el almacén las
+// dejaría contadas donde no están (#45).
+async function apuntarExistenciaInicial(productoId, costoBase, cantidad, sitioId) {
+  if (!(cantidad > 0) || !sitioId) return null;
+  const donde = (SITIOS.find(s => s.id === sitioId) || {}).nombre || 'el sitio';
   try {
     await api('/api/movimientos', { method: 'POST', body: JSON.stringify({
       tipo: 'compra',
-      sitio_id: sitioActual(),
+      sitio_id: sitioId,
       producto_id: productoId,
       cantidad,
       costo_unit: costoBase,
@@ -694,6 +877,47 @@ async function borrarProducto() {
   } catch (e) { alert('No se pudo eliminar: ' + e.message); }
 }
 
+// ─── Duplicar un producto ─────────────────────────────────────
+// Se copia todo lo que se parece —categoría, unidad, bulto, costos, precio con sus
+// excepciones por local, comisión, mínimo, local y foto— y se quedan fuera las dos
+// cosas que son de ESE producto y de ningún otro: el código de la aplicación, que
+// lo pone el servidor al crear, y el código del fabricante, que es el que viene
+// impreso en su caja.
+//
+// No se guarda nada todavía: se abre la ficha con lo copiado dentro y no nace
+// ningún producto hasta que se pulsa Guardar. La otra forma —crear la copia en el
+// servidor y abrirla para editarla— deja un producto suelto cada vez que alguien
+// se arrepiente.
+async function duplicarProducto() {
+  const p = PRODUCTOS.find(x => x.id === editando);
+  if (!p) return;
+  abrirFicha(p.id, true);
+  toast('Cambia lo que sea distinto y dale a Guardar');
+  const foto = await fotoComoDatos(p);
+  // Traer la foto tarda un momento, y en ese momento se puede haber cerrado la
+  // ficha o abierto otra: pegarla entonces se la pondría al producto equivocado.
+  if (editando || FICHA_PRODUCTO !== p) return;
+  fotoActual = foto;
+  pintarFoto();
+}
+
+// La foto de un producto, tal como habría que mandarla al crear otro: los mismos
+// datos que manda la cámara. Ya no viaja dentro del catálogo (#36), así que hay
+// que ir a buscarla. Si no se puede traer se sigue sin ella: quedarse sin foto en
+// una copia es un fastidio, no un fallo, y no vale la pena parar por eso.
+function fotoComoDatos(p) {
+  if (!p || !p.tiene_foto) return Promise.resolve(null);
+  return fetch(fotoDe(p))
+    .then(r => r.ok ? r.blob() : null)
+    .then(b => b && new Promise(res => {
+      const l = new FileReader();
+      l.onload = () => res(l.result);
+      l.onerror = () => res(null);
+      l.readAsDataURL(b);
+    }))
+    .catch(() => null);
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  CAJA
 // ═══════════════════════════════════════════════════════════════
@@ -714,6 +938,58 @@ function recuperarCarro() {
 }
 
 function sitioActual() { return SITIO || (SITIOS[0] && SITIOS[0].id) || ''; }
+
+// ─── DE QUÉ LOCAL ES CADA PRODUCTO (DECISIONES.md #45) ──────
+// Cada tienda y cada almacén tiene los suyos: los que se crearon allí MÁS los que
+// ha tenido alguna vez —lo que le despachó el almacén, lo que le trajo una
+// inversión—. Esa segunda mitad no es un adorno: sin ella, la mercancía que llega
+// de fuera no se podría vender, porque se creó en otro local y no saldría en la
+// pantalla de quien la tiene delante.
+//
+// Y se mira si ha HABIDO movimiento, no si queda existencia: una tienda que
+// vendió hasta el último saco tiene que seguir viéndolo, porque mañana le mandan
+// más. Si se fuera al llegar a cero, desaparecería justo el día que hay que pedirlo.
+//
+// El almacén principal los ve TODOS: es el mirador del negocio (#22) y quien está
+// allí necesita ver también lo que cada tienda se ha creado por su cuenta.
+//
+// Y UN PRODUCTO SUELTO NO SE VE EN NINGÚN LOCAL. Suelto es el que todavía no tiene
+// local Y nunca ha tenido mercancía en ninguno: el que se acaba de escribir en
+// Productos y está esperando que le pongan sitio. Ese vive SOLO en el apartado de
+// Productos —ni en la caja, ni en el almacén, ni en el mirador— hasta que se le
+// asigna uno.
+//
+// El «y nunca ha tenido mercancía» no es un adorno: si a un producto con
+// existencias en la tienda se le quitara el local, esconderlo dejaría esa
+// mercancía sin poder venderse y sin que nadie entendiera por qué. Mientras haya
+// movimientos suyos en un local, ese local lo sigue viendo.
+const estaSuelto = p => !p.sitio_id && !(p.sitios || []).length;
+
+function veAqui(p) {
+  if (estaSuelto(p)) return false;
+  if (enElMirador()) return true;
+  const aqui = sitioActual();
+  return p.sitio_id === aqui || (p.sitios || []).includes(aqui);
+}
+const productosAqui = () => PRODUCTOS.filter(p => !p.borrado_en && veAqui(p));
+
+// EL APARTADO DE PRODUCTOS es la excepción, y la razón de ser de todo esto: aquí
+// salen los de este local MÁS los que todavía no tienen ninguno, porque es donde
+// se crean y desde donde se les pone local. Si no salieran aquí no saldrían en
+// ninguna parte, y no habría manera de asignarlos.
+const productosDelApartado = () =>
+  PRODUCTOS.filter(p => !p.borrado_en && (veAqui(p) || estaSuelto(p)));
+
+// LO QUE ENSEÑA EL ALMACÉN. Mirando el negocio sumado salen todos los productos
+// asignados: es justo lo que se ha pedido ver, y el almacén principal es la suma
+// de todos los demás (#22). Mirando este local, los de este local.
+//
+// Los que todavía no tienen local no están en ninguna de las dos vistas, ni
+// siquiera en la suma: aquí se cuentan existencias, y un producto sin local
+// todavía no es de nadie (#45).
+const productosDelAlmacen = () => $('alm-alcance').value === 'todos'
+  ? PRODUCTOS.filter(p => !p.borrado_en && !estaSuelto(p))
+  : productosAqui();
 
 // El precio guardado va en la moneda del propio producto; aquí se pasa a la
 // que se esté cobrando. Es el mismo cálculo que hace el servidor, que es quien
@@ -818,6 +1094,11 @@ async function cambiarSitio() {
   recuperarCarro();
   await cargarStock();
   renderCarro();
+  // El catálogo cambia con el local (#45): los productos que se ven son otros, y
+  // las categorías también. Sin repintarlos aquí, al cambiar de tienda se seguiría
+  // viendo la lista de la anterior hasta salir y volver a entrar.
+  rellenarCategorias();
+  renderLista();
   renderResultados();
   toast('Vendiendo en ' + (SITIOS.find(s => s.id === SITIO) || {}).nombre);
 }
@@ -842,7 +1123,9 @@ function renderResultados() {
   const q = ($('caja-busq').value || '').trim().toLowerCase();
   const cat = $('caja-cat') ? $('caja-cat').value : '';
   const cont = $('caja-resultados');
-  let lista = PRODUCTOS.filter(p => !p.borrado_en);
+  // Solo los de este local (#45): quien despacha no tiene por qué buscar entre los
+  // productos de las otras tiendas para encontrar los que tiene delante.
+  let lista = productosAqui();
   if (cat) lista = lista.filter(p => p.categoria === cat);
 
   if (q) {
@@ -1075,7 +1358,7 @@ function usarCodigoLeido(valor) {
     setTimeout(cerrarEscaner, 500);
     return;
   }
-  const p = PRODUCTOS.find(x => !x.borrado_en &&
+  const p = productosAqui().find(x =>
     (String(x.codigo_barra || '') === valor || String(x.codigo || '') === valor));
   if (p) {
     alCarro(p.id);
@@ -1094,7 +1377,7 @@ function usarCodigoLeido(valor) {
     </div>`;
   $('esc-busq').addEventListener('input', () => {
     const q = ($('esc-busq').value || '').trim().toLowerCase();
-    $('esc-res').innerHTML = !q ? '' : PRODUCTOS.filter(x => !x.borrado_en &&
+    $('esc-res').innerHTML = !q ? '' : productosAqui().filter(x =>
       x.nombre.toLowerCase().includes(q)).slice(0, 5).map(x =>
       `<div class="prod" onclick="engancharCodigo('${x.id}','${esc(valor)}')">
          <span class="cod">${esc(x.codigo)}</span>
@@ -1575,7 +1858,7 @@ async function cargarResumen() {
       ${g ? fila('Ganancia bruta', conRef(v.ganancia), true) : ''}
       ${fila('− Comisión de vendedores', enBase(v.comision))}
       ${g && d.personal ? fila('− Salarios y adelantos', enBase(d.personal.sueldos)) : ''}
-      ${g && d.personal ? fila('Queda después de la gente', conRef(d.personal.queda), true) : ''}
+      ${g && d.personal ? fila('Queda después del personal', conRef(d.personal.queda), true) : ''}
       ${g ? fila('Mermas', enBase(d.mermas.valor)) : ''}
       ${g ? fila('Entradas de mercancía', enBase(d.compras.valor)) : ''}
       ${bloqueFondo}
@@ -1737,7 +2020,7 @@ function imprimirResumen() {
      ${g ? kv('Ganancia bruta', conRef(v.ganancia), true) : ''}
      ${kv('− Comisión de vendedores', enBase(v.comision))}
      ${g && d.personal ? kv('− Salarios y adelantos', enBase(d.personal.sueldos)) : ''}
-     ${g && d.personal ? kv('Queda después de la gente', conRef(d.personal.queda), true) : ''}
+     ${g && d.personal ? kv('Queda después del personal', conRef(d.personal.queda), true) : ''}
      ${g ? kv('Mermas', enBase(d.mermas.valor)) : ''}
      ${g ? kv('Entradas de mercancía', enBase(d.compras.valor)) : ''}
      ${(d.fondo || []).filter(f => f.tipo !== 'ingreso').map(f =>
@@ -1785,10 +2068,47 @@ function imprimirResumen() {
     piePDF());
 }
 
+// Lo que se exporta es LO QUE SE VE: si hay un filtro puesto o algo escrito en
+// el buscador, el PDF sale con eso. Un informe que no coincide con la pantalla
+// desde la que se pidió es una trampa para quien lo lee después.
+function imprimirCatalogo() {
+  const q = ($('busq').value || '').trim().toLowerCase();
+  const cat = $('f-cat').value;
+  let lista = productosDelApartado();
+  if (cat) lista = lista.filter(p => p.categoria === cat);
+  lista = deEsteLocal(lista);
+  if (q) lista = lista.filter(p =>
+    (p.nombre || '').toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q) ||
+    (p.codigo_barra || '').toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q));
+  lista.sort((a, b) => (a.categoria || '').localeCompare(b.categoria || '') ||
+                       a.nombre.localeCompare(b.nombre));
+  if (!lista.length) { toast('⚠ No hay productos que exportar'); return; }
+  const verCosto = lista.some(p => p.costo !== null && p.costo !== undefined);
+  const sitio = (SITIOS.find(s => s.id === sitioActual()) || {}).nombre || '';
+  const filtro = [cat ? 'categoría ' + cat : '', nombreDelFiltroLocal(),
+                  q ? '«' + q + '»' : ''].filter(Boolean).join(' · ');
+
+  lanzarImpresion(
+    cabeceraPDF('Catálogo de productos',
+      lista.length + ' productos' + (filtro ? ' · ' + filtro : '') + ' · existencias de ' + sitio) +
+    `<table><thead><tr><th>Código</th><th>Producto</th><th>Categoría</th>
+       <th class="n">Precio</th>${verCosto ? '<th class="n">Costo</th>' : ''}
+       <th class="n">Existencia</th></tr></thead><tbody>` +
+    lista.map(p => `<tr><td>${esc(p.codigo)}</td><td>${esc(p.nombre)}${
+        p.codigo_barra ? '<br><span style="font-size:8pt;color:#888">' + esc(p.codigo_barra) + '</span>' : ''}</td>
+      <td>${esc(p.categoria || '—')}</td>
+      <td class="n">${dinero(p.precio, p.precio_moneda || 'CUP')}</td>
+      ${verCosto ? '<td class="n">' + enBase(p.costo || 0) + '</td>' : ''}
+      <td class="n">${Math.round(Number(STOCK[p.id] || 0))} ${esc(p.um || '')}</td></tr>`).join('') +
+    '</tbody></table>' +
+    (verCosto ? '' : '<div class="nota">Sin los costos: tu cargo no tiene permiso para verlos.</div>') +
+    piePDF());
+}
+
 function imprimirInventario() {
   const cat = $('alm-cat').value, filtro = $('alm-filtro').value;
   const q = ($('alm-busq').value || '').trim().toLowerCase();
-  let lista = PRODUCTOS.filter(p => !p.borrado_en);
+  let lista = productosDelAlmacen();
   if (cat) lista = lista.filter(p => p.categoria === cat);
   if (q) lista = lista.filter(p => (p.nombre || '').toLowerCase().includes(q) ||
     (p.codigo || '').toLowerCase().includes(q));
@@ -1886,7 +2206,7 @@ function imprimirCuadre() {
      ${g ? kv('Ganancia bruta', conRef(v.total - v.costo), true) : ''}
      ${kv('− Comisión de vendedores', enBase(v.comision))}
      ${g && DIA.personal ? kv('− Salarios y adelantos', enBase(DIA.personal.sueldos)) : ''}
-     ${g && DIA.personal ? kv('Queda después de la gente', conRef(DIA.personal.queda), true) : ''}
+     ${g && DIA.personal ? kv('Queda después del personal', conRef(DIA.personal.queda), true) : ''}
      <h2>Movimientos de mercancía</h2>
      ${g ? kv('Entradas', enBase(DIA.compras.valor)) : kv('Entradas (unidades)', DIA.compras.unidades)}
      ${g ? kv('Mermas', enBase(DIA.mermas.valor)) : kv('Mermas (unidades)', DIA.mermas.unidades)}
@@ -2156,7 +2476,7 @@ async function cargarAlmacen() {
 
   // CON UN SOLO SITIO, la vista de «todo el negocio» no suma nada: enseña
   // exactamente lo mismo que «solo lo que hay aquí». Y a cambio esconde los
-  // botones de Entrada, Merma y Despachar, porque una entrada tiene que ir a un
+  // botones de Entrada, Merma y Transferencia, porque una entrada tiene que ir a un
   // sitio concreto y no «a todos».
   //
   // El resultado era una pantalla de Almacén SIN NINGUNA FORMA DE METER
@@ -2169,7 +2489,7 @@ async function cargarAlmacen() {
   // que se cree un punto de venta. Nada que configurar.
   const variosSitios = SITIOS.filter(s => s.activo !== 0).length > 1;
   $('alm-alcance-caja').style.display = variosSitios ? '' : 'none';
-  // Despachar es mandar mercancía a OTRO sitio: sin otro sitio no hay destino.
+  // Transferir es mandar mercancía a OTRO sitio: sin otro sitio no hay destino.
   // Se mira también el permiso, porque este renglón pisa lo que dejó puesto
   // aplicarPermisos() al entrar.
   $('btn-despachar').style.display =
@@ -2207,7 +2527,8 @@ async function cargarAlmacen() {
 }
 
 function rellenarCategoriasAlmacen() {
-  const cats = [...new Set(PRODUCTOS.map(p => p.categoria).filter(Boolean))].sort();
+  // Como en Productos, las categorías son las de lo que se está mirando (#45).
+  const cats = [...new Set(productosDelAlmacen().map(p => p.categoria).filter(Boolean))].sort();
   const sel = $('alm-cat'), antes = sel.value;
   sel.innerHTML = '<option value="">Todas las categorías</option>' +
     cats.map(c => `<option>${esc(c)}</option>`).join('');
@@ -2220,7 +2541,7 @@ function renderAlmacen() {
   const filtro = $('alm-filtro').value;
   const todos = $('alm-alcance').value === 'todos';
 
-  let lista = PRODUCTOS.filter(p => !p.borrado_en);
+  let lista = productosDelAlmacen();
   if (cat) lista = lista.filter(p => p.categoria === cat);
   if (q) lista = lista.filter(p =>
     (p.nombre || '').toLowerCase().includes(q) ||
@@ -2280,7 +2601,7 @@ function almacenVacio(filtro, antesDeExistencia, buscando) {
   if (!antesDeExistencia) return '<div class="vacio">' + (buscando
     ? 'Nada coincide con lo que buscas.'
     : 'Todavía no hay ningún producto en el catálogo.<br>' +
-      'Créalo con el botón «Nuevo producto» de aquí abajo.') + '</div>';
+      'Créalo en la pantalla de <b>Productos</b>, aquí abajo.') + '</div>';
   if (filtro === 'con') return '<div class="vacio">Ninguno tiene existencia todavía.<br>' +
     'Tienes ' + antesDeExistencia + (antesDeExistencia === 1 ? ' producto' : ' productos') +
     ' en el catálogo · <button class="acc" onclick="verTodoElCatalogo()">Verlos todos</button>' +
@@ -2376,7 +2697,7 @@ function buscarEnModal(inputId, contId, alElegir, dejaCrear) {
   const q = ($(inputId).value || '').trim().toLowerCase();
   const cont = $(contId);
   if (!q) { cont.innerHTML = ''; return; }
-  const lista = PRODUCTOS.filter(p => !p.borrado_en && (
+  const lista = productosAqui().filter(p => (
     (p.nombre || '').toLowerCase().includes(q) ||
     (p.codigo || '').toLowerCase().includes(q) ||
     (p.codigo_barra || '').toLowerCase().includes(q))).slice(0, 6);
@@ -2421,8 +2742,12 @@ async function confirmarProductoRapido() {
   if (nombre.length < 2) { toast('⚠ Escribe el nombre del producto'); return; }
   const alElegir = PROD_RAPIDO.alElegir;
   try {
+    // Nace en el local donde se está trabajando (#45): se está creando en mitad de
+    // una entrada, una merma o un despacho de ESTE sitio. Dejarlo sin local lo
+    // escondería de la propia pantalla desde la que se acaba de crear.
     const r = await api('/api/productos', { method: 'POST', body: JSON.stringify({
-      nombre, um: ($('np-um').value || '').trim() || 'Unidad' }) });
+      nombre, um: ($('np-um').value || '').trim() || 'Unidad',
+      sitio_id: sitioActual() }) });
     cerrarProductoRapido();
     await cargarCatalogo();
     toast('✓ ' + r.codigo + ' creado');
@@ -2539,11 +2864,11 @@ async function guardarMov() {
   } catch (e) { alert('No se pudo registrar: ' + e.message); }
 }
 
-// ─── Despachar ────────────────────────────────────────────────
+// ─── Transferencia ────────────────────────────────────────────────
 function abrirDespacho() {
   DESPACHO = [];
   const otros = SITIOS.filter(s => s.id !== sitioActual());
-  if (!otros.length) { alert('Todavía no hay otro sitio al que despachar.\n\nCrea un punto de venta en Ajustes.'); return; }
+  if (!otros.length) { alert('Todavía no hay otro sitio al que transferir.\n\nCrea un punto de venta en Ajustes.'); return; }
   $('des-destino').innerHTML = otros.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
   $('des-busq').value = ''; $('des-obs').value = '';
   $('des-resultados').innerHTML = '';
@@ -2634,7 +2959,7 @@ async function guardarDespacho() {
   if (!DESPACHO.length) { toast('⚠ Añade algún producto'); return; }
   const pasadas = DESPACHO.filter(l => udsDespacho(l) > Number(STOCK[l.producto_id] || 0) + 0.0001);
   if (pasadas.length) {
-    alert('No se puede despachar mercancía que no está:\n\n' +
+    alert('No se puede transferir mercancía que no está:\n\n' +
       pasadas.map(l => '· ' + l.nombre + ': hay ' + Number(STOCK[l.producto_id] || 0) +
                        ' y estás enviando ' + udsDespacho(l)).join('\n') +
       '\n\nApunta primero la entrada de esa mercancía, o envía lo que haya de verdad.');
@@ -2653,9 +2978,9 @@ async function guardarDespacho() {
                                    medida: l.medida || 'unidad' }))
     })});
     cerrarDespacho();
-    toast('✓ Despachado. Esperando que confirmen allí.');
+    toast('✓ Transferido. Esperando que confirmen allí.');
     await cargarAlmacen();
-  } catch (e) { alert('No se pudo despachar: ' + e.message); }
+  } catch (e) { alert('No se pudo transferir: ' + e.message); }
 }
 
 // ─── Recibir ──────────────────────────────────────────────────
@@ -2688,6 +3013,11 @@ async function guardarRecepcion() {
       method: 'POST', body: JSON.stringify({ lineas }) });
     cerrarRecibir();
     toast(r.completo ? '✓ Recibido completo' : '✓ Recibido, con faltante anotado');
+    // El catálogo TAMBIÉN, y no solo el almacén: lo que acaba de llegar puede ser
+    // un producto que este local no tenía todavía, y hasta que no se vuelve a pedir
+    // no sabe que ya es suyo (#45). Sin esto se recibiría mercancía que no se puede
+    // vender hasta salir y volver a entrar en la aplicación.
+    await cargarCatalogo();
     await cargarAlmacen();
   } catch (e) { alert('No se pudo confirmar: ' + e.message); }
 }
@@ -4328,8 +4658,12 @@ async function cargarSalvas() {
   try { d = await api('/api/salvas'); }
   catch (e) { $('sa-lista').innerHTML = '<div class="pista">' + esc(e.message) + '</div>'; return; }
   SALVAS = d.salvas || [];
+  // Sin decir DÓNDE se guardan: una ruta de la máquina no le sirve de nada a quien
+  // lee esto, y no tiene por qué ver las tripas de la aplicación. Lo que sí le
+  // sirve —bajarse una copia— está aquí mismo, en la lista de abajo.
   $('sa-nota').textContent = 'Se guarda una copia entera al arrancar y cada ' + d.cada_horas +
-    ' horas. Se conservan las ' + d.guardar + ' últimas, en ' + d.carpeta + '.';
+    ' horas. Se conservan las ' + d.guardar + ' últimas, guardadas a buen recaudo dentro de la propia aplicación. ' +
+    'Toca el tamaño de cualquiera para bajarte esa copia.';
   const kb = b => b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB';
   const cuando = s => {
     const t = new Date(s.cuando);
@@ -4995,7 +5329,7 @@ async function eliminarCargo() {
   if (!c) return;
   if (!confirm('¿Quitar el cargo «' + c.nombre + '»?\n\n' +
       'Deja de salir en la lista y no se le podrá poner a nadie. Los apuntes ' +
-      'que hizo la gente que lo tuvo no se tocan.')) return;
+      'que hizo el personal que lo tuvo no se tocan.')) return;
   try {
     await api('/api/cargos/' + c.id, { method: 'DELETE' });
     cerrarCargo();
@@ -5020,10 +5354,43 @@ function abrirPersona(id) {
   $('pe-moneda-pago').value = (p && p.moneda_pago) || '';
   $('pe-activo-caja').style.display = p ? 'block' : 'none';
   $('pe-activo').checked = p ? !!p.activo : true;
+  // Quitar solo tiene sentido sobre alguien que ya existe, y nunca sobre uno
+  // mismo: el servidor lo niega igual, pero ofrecer un botón que va a decir que
+  // no es hacer perder el tiempo.
+  $('pe-borrar').style.display = (p && !esMiUsuario(p.id)) ? 'block' : 'none';
   $('velo-persona').classList.add('abierto');
   setTimeout(() => $('pe-nombre').focus(), 120);
 }
 function cerrarPersona() { $('velo-persona').classList.remove('abierto'); }
+
+// Quién está usando la aplicación ahora mismo. Con la piel de otro puesta manda
+// esa, que es de quién son los permisos que se están usando.
+function esMiUsuario(id) {
+  const yo = YO && (YO.como || YO.persona);
+  return !!(yo && yo.id === id);
+}
+
+// QUITAR UN TRABAJADOR. No es lo mismo que quitarle el acceso: el acceso se le
+// quita a quien se va unos meses y vuelve; esto es para quien ya no está, y lo
+// saca de la lista, del reparto del día y de la puerta de entrada.
+//
+// Lo que hizo NO se toca: sus ventas, sus cierres y sus comisiones se quedan con
+// su nombre. Se dice en el aviso, porque es justo lo que da miedo al pulsarlo.
+async function eliminarPersona() {
+  const p = PERSONAS.find(x => x.id === personaEditando);
+  if (!p) return;
+  if (!confirm('¿Quitar a ' + p.nombre + '?\n\n' +
+      'Deja de salir en el personal y no podrá volver a entrar. Sus ventas, sus ' +
+      'cierres y sus comisiones se quedan como están, con su nombre.\n\n' +
+      'Si solo quieres que no entre por un tiempo, quita la marca de ' +
+      '«Puede entrar en la aplicación» y guarda.')) return;
+  try {
+    await api('/api/personas/' + p.id, { method: 'DELETE' });
+    cerrarPersona();
+    toast('✓ Trabajador quitado');
+    await cargarPersonal();
+  } catch (e) { alert('No se pudo quitar: ' + e.message); }
+}
 
 async function guardarPersona() {
   const nombre = $('pe-nombre').value.trim();
@@ -5191,8 +5558,7 @@ async function anularPagoCom(id) {
 
 async function cargarSync() {
   if (!puedo('sincronizar')) return;
-  const nombreSitio = (SITIOS.find(s => s.id === sitioActual()) || {}).nombre || '—';
-  $('sy-sitio').textContent = nombreSitio;
+  pintarQueExportar();
   try {
     const d = await api('/api/sync/estado');
     $('sy-id').textContent = d.instalacion.slice(0, 8);
@@ -5211,10 +5577,31 @@ async function cargarSync() {
 }
 
 // ─── Por archivo ──────────────────────────────────────────────
+// QUÉ SE PUEDE EXPORTAR: el negocio entero o un local suelto. La primera opción va
+// la primera y es la que sale puesta, porque es la que contesta a «quiero una copia
+// de todo»; la de un local suelto sirve para mandarle a un dispositivo solo lo suyo.
+//
+// Antes no había dónde elegir: se exportaba lo del sitio en el que se estuviera
+// trabajando, y en Ajustes no se cambia de sitio, así que salía siempre lo del
+// almacén principal y no había forma de sacar lo de una tienda ni lo de todos.
+function pintarQueExportar() {
+  const sel = $('sy-que');
+  if (!sel) return;
+  const antes = sel.value;
+  sel.innerHTML = '<option value="">Todo el negocio — todos los almacenes y puntos</option>' +
+    SITIOS.filter(s => s.activo !== 0)
+      .map(s => `<option value="${s.id}">Solo ${esc(s.nombre)}</option>`).join('');
+  sel.value = antes;
+  if (sel.value !== antes) sel.value = '';
+}
+
 async function exportarPaquete() {
   try {
-    // Lo del sitio que esté activo, que es lo que se espera al darle a exportar
-    const p = await api('/api/sync/paquete?sitio_id=' + encodeURIComponent(sitioActual()));
+    const cual = $('sy-que') ? $('sy-que').value : '';
+    // Sin sitio, el servidor manda el negocio entero. Se deja el parámetro fuera en
+    // vez de mandarlo vacío para que se lea de un vistazo qué se está pidiendo.
+    const p = await api('/api/sync/paquete' +
+      (cual ? '?sitio_id=' + encodeURIComponent(cual) : ''));
     const limpio = String(p.sitio || 'sitio').toLowerCase()
       .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-');
     const nombre = 'dpadrones-' + limpio + '-' + new Date().toLocaleDateString('sv-SE') + '.json';
@@ -5472,14 +5859,13 @@ async function cambiarMonedaBase() {
 async function cargarEstado() {
   try {
     const d = await api('/api/salud');
-    $('e-srv').textContent = 'en marcha';
     $('e-sitios').textContent = d.sitios;
     $('e-prods').textContent = d.productos;
     $('e-movs').textContent = d.movimientos;
     $('e-ventas').textContent = d.ventas;
     $('ver').textContent = 'v' + d.version;
     SALUD = d;
-  } catch (e) { $('e-srv').textContent = 'sin respuesta'; }
+  } catch (e) { /* sin conexión: las cifras se quedan con la raya, y ya se ve */ }
 
   $('lista-sitios').innerHTML = SITIOS.map(s => `<div class="fila">
     <span>${esc(s.nombre)}</span>
@@ -5496,7 +5882,7 @@ async function cargarEstado() {
 // reinstala desde cero (ver DECISIONES.md #13).
 async function olvidarSello() {
   const url = $('sy-url').value.trim();
-  if (!url) return toast('Escribe primero la dirección del otro servidor');
+  if (!url) return toast('Escribe primero la dirección de la otra copia');
   if (!confirm('¿Olvidar el sello apuntado de ' + url + '?\n\n' +
     'La próxima sincronización aceptará el sello que conteste, sea cual sea. ' +
     'Hazlo solo si sabes que esa copia se reinstaló.')) return;
@@ -5510,6 +5896,8 @@ async function olvidarSello() {
 ['in-usuario','in-pin'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); }));
 $('ad-pin').addEventListener('keydown', e => { if (e.key === 'Enter') crearAdmin(); });
 $('caja-busq').addEventListener('input', renderResultados);
+['busq', 'f-cat', 'f-orden', 'f-local'].forEach(id =>
+  $(id).addEventListener(id === 'busq' ? 'input' : 'change', renderLista));
 ['alm-busq', 'alm-cat', 'alm-filtro'].forEach(id =>
   $(id).addEventListener(id === 'alm-busq' ? 'input' : 'change', renderAlmacen));
 $('iv-busq').addEventListener('input', () => buscarEnModal('iv-busq', 'iv-resultados', 'alaInversion', true));
@@ -5532,7 +5920,7 @@ $('caja-busq').addEventListener('keydown', e => {
   e.preventDefault();
   const q = ($('caja-busq').value || '').trim().toLowerCase();
   if (!q) return;
-  const vivos = PRODUCTOS.filter(p => !p.borrado_en);
+  const vivos = productosAqui();
   const exacto = vivos.find(p => (p.codigo || '').toLowerCase() === q ||
                                  (p.codigo_barra || '').toLowerCase() === q);
   if (exacto) return alCarro(exacto.id);
@@ -5588,7 +5976,9 @@ async function cargarAvisos() {
 function avisosDelDispositivo() {
   const fuera = [];
   if (puedo('gestionar_inventario', 'vender', 'ver_catalogo')) {
-    const bajos = PRODUCTOS.filter(p => !p.borrado_en && p.stock_min > 0 &&
+    // Los de aquí (#45): avisar de que se acabó algo que esta tienda no ha tenido
+    // en su vida es enseñar a no hacer caso de la campanita.
+    const bajos = productosAqui().filter(p => p.stock_min > 0 &&
       Number(STOCK[p.id] || 0) <= p.stock_min);
     if (bajos.length) {
       const sitio = (SITIOS.find(s => s.id === sitioActual()) || {}).nombre || 'este sitio';
@@ -5602,15 +5992,17 @@ function avisosDelDispositivo() {
         titulo: agotados ? agotados + (agotados === 1 ? ' producto agotado' : ' productos agotados')
                          : bajos.length + (bajos.length === 1 ? ' producto por acabarse' : ' productos por acabarse'),
         texto: 'En ' + sitio + ': ' + bajos.slice(0, 3).map(p => p.nombre).join(', ') +
-               (bajos.length > 3 ? ' y ' + (bajos.length - 3) + ' más' : ''),
+               (bajos.length > 3 ? ' y ' + (bajos.length - 3) + ' más' : '') + '.',
       });
     }
   }
   if (VERSION_NUEVA) fuera.push({
     id: 'version:' + VERSION_NUEVA, tipo: 'version', cuando: new Date().toISOString(),
-    ir: 'version', titulo: 'Hay una versión nueva de la aplicación',
-    texto: 'Este dispositivo tiene la ' + (VERSION_MIA || '—') + ' y el servidor sirve la ' +
-           VERSION_NUEVA + '. Toca aquí para traerla.',
+    ir: 'version', titulo: 'Hay una versión nueva de D´Padrones',
+    // Sin números de versión: en la barra del teléfono no le dicen nada a nadie.
+    // Quien los necesite los tiene al pie de Ajustes y en la tarjeta de la Caja.
+    texto: 'Tócalo para actualizar este dispositivo. Tarda unos segundos, hace falta ' +
+           'internet y no se pierde nada de lo que tengas a medias.',
   });
   return fuera;
 }
@@ -5641,8 +6033,9 @@ function pintarAvisos() {
       </div>
       <div class="c">${fechaHora(a.cuando)}</div>
     </div>`).join('')
-    : '<div class="vacio">Nada pendiente.<br><br>Aquí sale la mercancía que se ' +
-      'está acabando y los avisos de versión nueva.</div>';
+    : '<div class="vacio">Nada pendiente.<br><br>Aquí aparece la mercancía que se ' +
+      'está acabando en este local y el aviso de que hay una versión nueva de la ' +
+      'aplicación.</div>';
 }
 
 function irAlAviso(i) {
@@ -5679,8 +6072,9 @@ function anunciarLosNuevos() {
   // Uno solo se enseña entero; varios de golpe se resumen, que veinte avisos
   // seguidos en la barra del teléfono no los lee nadie.
   if (nuevos.length === 1) avisoDelSistema(nuevos[0].titulo, nuevos[0].texto);
-  else avisoDelSistema('Hay ' + nuevos.length + ' cosas nuevas',
-    nuevos.slice(0, 3).map(a => a.titulo).join(' · '));
+  else avisoDelSistema(nuevos.length + ' avisos que atender',
+    nuevos.slice(0, 3).map(a => a.titulo).join(' · ') +
+    (nuevos.length > 3 ? ' · y ' + (nuevos.length - 3) + ' más' : ''));
 }
 function guardarAnunciados(ids) {
   // Se guardan también los que ya no están, por si vuelven a salir en el mismo
@@ -5693,9 +6087,9 @@ async function pedirPermisoAvisos() {
   try {
     const r = await Notification.requestPermission();
     pintarAvisos();
-    if (r === 'granted') avisoDelSistema('Listo',
-      'Así van a salir los avisos de la mercancía que se acaba.');
-    else toast('No pasa nada: la campanita sigue avisando igual.');
+    if (r === 'granted') avisoDelSistema('Avisos activados',
+      'Así se verán en este teléfono los avisos de D´Padrones.');
+    else toast('La campanita de la aplicación sigue avisando igual.');
   } catch (e) { toast('Este navegador no sabe hacer eso'); }
 }
 
@@ -5794,11 +6188,11 @@ async function traerVersionNueva() {
 }
 
 async function buscarActualizacion() {
-  $('ver-aviso').innerHTML = '<div class="pista">Preguntando al servidor…</div>';
+  $('ver-aviso').innerHTML = '<div class="pista">Comprobando si hay una versión nueva…</div>';
   const { mia, suya } = await mirarVersiones();
   if (!suya) {
-    $('ver-aviso').innerHTML = '<div class="aviso">No se pudo preguntar al servidor. ' +
-      'Comprueba que hay internet y vuelve a intentarlo.</div>';
+    $('ver-aviso').innerHTML = '<div class="aviso">No se pudo comprobar si hay una versión ' +
+      'nueva. Comprueba que hay internet y vuelve a intentarlo.</div>';
     return;
   }
   if (mia && mia === suya) {

@@ -498,6 +498,38 @@ const hoy = new Date().toLocaleDateString('sv-SE');
       (await postComo(tNuevo, '/api/auth/mi-pin',
         { pin_actual: '8888', pin_nuevo: '9999' })).status === 200);
 
+    // QUITAR A UN TRABAJADOR. Pedido por el dueño el 4 de septiembre de 2026: hasta
+    // ese día solo se le podía quitar el acceso y la lista se llenaba de gente que ya
+    // no está. Se quita en blando —su fila se queda— porque las ventas y los cierres
+    // que hizo apuntan a ella, y borrarla dejaría el historial sin nombres.
+    console.log('\n=== Se puede quitar a un trabajador, y no a cualquiera ===');
+    const personalAhora = () => pedir('/api/cargos').then(r => r.cuerpo.personas);
+    const fuera = (await post('/api/personas', { nombre: 'Pasó por aquí', usuario: 'pasajero',
+      pin: '5151', cargo_id: pelado, sitio_id: tienda })).cuerpo.id;
+    comp('está en el personal antes de quitarlo',
+      (await personalAhora()).some(p => p.id === fuera));
+    const quitado = await pedir('/api/personas/' + fuera, { method: 'DELETE' });
+    comp('se quita', quitado.status === 200, JSON.stringify(quitado.cuerpo));
+    comp('y deja de salir en el personal',
+      !(await personalAhora()).some(p => p.id === fuera));
+    comp('y ya no puede entrar',
+      (await post('/api/auth/entrar', { usuario: 'pasajero', pin: '5151' })).status === 401);
+    comp('quitarlo dos veces no cuela',
+      (await pedir('/api/personas/' + fuera, { method: 'DELETE' })).status === 404);
+
+    // Las dos puertas cerradas, y las dos por lo mismo: no dejar el negocio sin
+    // nadie que pueda entrar a arreglarlo.
+    const yoMismo = (await personalAhora()).find(p => p.usuario === 'jefe');
+    const aMiMismo = await pedir('/api/personas/' + yoMismo.id, { method: 'DELETE' });
+    comp('nadie se puede quitar a sí mismo', aMiMismo.status === 400,
+      aMiMismo.status + ' ' + JSON.stringify(aMiMismo.cuerpo));
+    // Aquí hay DOS administradores (el jefe y el socio), así que quitar uno sí se
+    // deja; al quedar uno solo, ya no.
+    comp('con dos administradores, quitar a uno se deja',
+      (await pedir('/api/personas/' + otroAdmin, { method: 'DELETE' })).status === 200);
+    comp('y el último administrador que queda no se puede quitar',
+      (await pedir('/api/personas/' + yoMismo.id, { method: 'DELETE' })).status === 400);
+
     console.log('\n' + (mal ? 'HAY ' + mal + ' FALLO(S)' : 'TODO BIEN') +
                 ': ' + (ok + mal) + ' comprobaciones');
     cerrarTodo();

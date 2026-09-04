@@ -6,7 +6,7 @@
 // llegaron a los teléfonos, mientras dábamos el trabajo por terminado. La
 // versión se ve al pie de Ajustes: si no coincide, ese aparato tiene código
 // viejo y no vale para probar nada.
-const CACHE = 'dp-v20260903-7';
+const CACHE = 'dp-v20260904-1';
 
 const ASSETS = [
   './',
@@ -40,7 +40,7 @@ self.addEventListener('activate', e => {
 });
 
 // Tocar el aviso del teléfono trae la aplicación a la pantalla en vez de abrir
-// otra copia: quien lo toca quiere ver el pedido, no quedarse con dos ventanas
+// otra copia: quien lo toca quiere ver el aviso, no quedarse con dos ventanas
 // de la caja abiertas y el carrito a medias en una de las dos.
 self.addEventListener('notificationclick', e => {
   e.notification.close();
