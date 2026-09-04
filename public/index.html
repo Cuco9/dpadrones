@@ -132,6 +132,18 @@
       <select id="sitio-actual" onchange="cambiarSitio()"></select>
     </div>
 
+    <!-- En el mirador no se vende: ahí no hay mercancía, solo la suma de la de
+         todos los locales (DECISIONES.md #48). En vez de dejar armar un carro que
+         el servidor va a rechazar, se dice antes y se manda a elegir un local. -->
+    <div class="tarjeta" id="caja-mirador" style="display:none">
+      <div class="aviso" style="margin:0">
+        <b>Aquí no se vende.</b>
+        <span id="caja-mirador-nombre">El almacén principal</span> es donde se ven
+        <b>los totales de todos</b> los locales sumados; la mercancía está en cada
+        almacén y en cada tienda. Elige arriba dónde estás vendiendo.
+      </div>
+    </div>
+
     <div class="buscador">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <input type="search" id="caja-busq" placeholder="Código o nombre…" autocomplete="off">

@@ -79,7 +79,11 @@ const fondo = () => pedir('/api/fondo?desde=' + hoy + '&hasta=' + hoy);
     const ses = await post('/api/auth/entrar', { usuario: 'jefe', pin: '1234' });
     cab = { Authorization: 'Bearer ' + ses.cuerpo.token };
     await post('/api/tasa', { tasa: 400 });
-    const almacen = (await pedir('/api/sitios')).cuerpo[0].id;
+    // El «Almacén Principal» que siembra la aplicación es el MIRADOR: desde ahí se
+    // ven los totales de todos sumados y no se guarda nada (DECISIONES.md #48).
+    // El almacén de verdad, el que tiene la mercancía, se crea aquí.
+    const almacen = (await post('/api/sitios',
+      { nombre: 'Almacén Central', tipo: 'almacen' })).cuerpo.id;
     const centro = (await post('/api/sitios',
       { nombre: 'Punto Centro', tipo: 'punto', padre_id: almacen })).cuerpo.id;
     comp('los dos sitios están', !!(almacen && centro));

@@ -100,7 +100,11 @@ const hoy = new Date().toLocaleDateString('sv-SE');
     comp('el valor del dólar NO está en la lista: es solo del administrador',
       !cat.some(p => /tasa|moneda_base/.test(p.id)));
 
-    const almacen = (await pedir('/api/sitios')).cuerpo[0].id;
+    // El «Almacén Principal» que siembra la aplicación es el MIRADOR: desde ahí se
+    // ven los totales de todos sumados y no se guarda nada (DECISIONES.md #48).
+    // El almacén de verdad, el que tiene la mercancía, se crea aquí.
+    const almacen = (await post('/api/sitios',
+      { nombre: 'Almacén Central', tipo: 'almacen' })).cuerpo.id;
     const tienda = (await post('/api/sitios',
       { nombre: 'Tienda Centro', tipo: 'punto', padre_id: almacen })).cuerpo.id;
     const prod = (await post('/api/productos', { nombre: 'Cable', precio: 100,
@@ -173,7 +177,7 @@ const hoy = new Date().toLocaleDateString('sv-SE');
       ajeno.status + ' ' + JSON.stringify(ajeno.cuerpo).slice(0, 120));
     comp('y se le dice en qué sitio trabaja y cuál está tocando',
       /Tienda Centro/.test(ajeno.cuerpo.error || '') &&
-      /Almacén Principal/.test(ajeno.cuerpo.error || ''), ajeno.cuerpo.error);
+      /Almacén Central/.test(ajeno.cuerpo.error || ''), ajeno.cuerpo.error);
     comp('apuntar una merma en otro sitio, tampoco',
       (await postComo(tAna, '/api/movimientos', { tipo: 'merma', sitio_id: almacen,
         producto_id: prod, cantidad: 5 })).status === 403);
@@ -262,7 +266,7 @@ const hoy = new Date().toLocaleDateString('sv-SE');
       porElReparto.status === 403,
       porElReparto.status + ' ' + JSON.stringify(porElReparto.cuerpo).slice(0, 140));
     comp('y se le dice qué sitio está tocando y qué hacer en su lugar',
-      /Almacén Principal/.test(porElReparto.cuerpo.error || '') &&
+      /Almacén Central/.test(porElReparto.cuerpo.error || '') &&
       /despáchala/i.test(porElReparto.cuerpo.error || ''), porElReparto.cuerpo.error);
 
     // La otra forma de la misma puerta: el sitio suelto de la línea.

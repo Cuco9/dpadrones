@@ -76,7 +76,11 @@ const stock = async (sitio, producto) =>
     comp('se entra con el PIN', !!ses.cuerpo.token, JSON.stringify(ses.cuerpo));
 
     await post('/api/tasa', { tasa: 400 });
-    const almacen = (await pedir('/api/sitios')).cuerpo[0].id;
+    // El «Almacén Principal» que siembra la aplicación es el MIRADOR: desde ahí se
+    // ven los totales de todos sumados y no se guarda nada (DECISIONES.md #48).
+    // El almacén de verdad, el que tiene la mercancía, se crea aquí.
+    const almacen = (await post('/api/sitios',
+      { nombre: 'Almacén Central', tipo: 'almacen' })).cuerpo.id;
     const punto = await post('/api/sitios', { nombre: 'Punto Centro', tipo: 'punto', padre_id: almacen });
     comp('se crea el punto de venta', punto.status === 200, JSON.stringify(punto.cuerpo));
 

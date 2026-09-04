@@ -2087,6 +2087,121 @@ escribe en una oficina.
 
 ---
 
+## 48. El Almacén Principal no es un sitio: es el mirador
+
+Dicho por el dueño el **4 de septiembre de 2026**, unas horas después de desplegar
+la #45: «dije que en D´Padrones **el almacén principal es solo para sumar lo de
+todos los almacenes, ahí no se asigna nada**; entonces por qué en Productos me sale
+para asignar productos al almacén principal. Ni en dinero ni en productos se mueve
+nada por el almacén principal; en el almacén principal solo se ven los totales de
+todo, es para eso».
+
+Y una precisión suya que lo cierra: **el Almacén Principal lo creó la aplicación
+sola al instalarse**, no lo creó él pensando en un almacén de verdad.
+
+### De dónde venía el error
+
+La #45 se trajo entera de la otra aplicación, y allí el almacén principal **es un
+almacén de verdad**: guarda mercancía y surte a las tiendas, además de ser el
+mirador del negocio (#22). Aquí no. Aquí el negocio son sus locales, y el «Almacén
+Principal» es el sitio que la aplicación siembra al instalarse para poder ponerse
+en él y ver **la suma de todos**.
+
+Copiar una decisión de otra aplicación es copiar también las suyas, y esta venía
+pegada sin que se notara: en la pantalla de Productos, el desplegable «Este
+producto es de» ofrecía el Almacén Principal como si fuera un local más. Y peor:
+**la migración de la #45 le dio todos los productos que ya existían.**
+
+### La regla
+
+> El mirador es **desde donde se mira**, no **dónde están las cosas**. Ahí no se
+> asigna un producto, no entra ni sale mercancía, no se vende, no se cierra un día
+> y no pasa dinero.
+
+Sigue estando en el desplegable de arriba —el de «dónde estoy»—, porque es
+justamente para lo que existe: ponerse ahí y ver los totales. Desaparece de todos
+los demás, que son los de «dónde pasa esto»: de qué local es un producto, a dónde
+se transfiere, de qué caja sale el dinero, en qué local trabaja alguien, de qué
+almacén se surte una tienda, qué se exporta.
+
+### Se reconoce por su identificador, no por ser el más viejo
+
+La #45 decía «el almacén principal es el primer almacén que se creó». Esa regla
+tiene una trampa que no se ve hasta el día que pasa: **si alguien apaga ese sitio,
+el mirador pasa a ser el siguiente almacén** —uno de verdad, con mercancía dentro—
+y de golpe deja de poder guardar nada, sin que nadie entienda por qué.
+
+Ahora es el sitio que la aplicación siembra al instalarse, y se conoce por su
+identificador. Está escrito en **una sola línea en cada lado** —`MIRADOR` en el
+servidor y en la pantalla—, porque si cada lado eligiera uno distinto, la
+aplicación enseñaría una cosa y el servidor guardaría otra.
+
+### Lo niega el SERVIDOR, no la pantalla
+
+Esconder las opciones es decoración (#10): un teléfono con el `app.js` viejo en su
+caché sigue ofreciendo el mirador en cada desplegable, y colaría. Hay **un guardián
+en el servidor**, delante de todos los demás, que mira las escrituras y las rechaza
+si llevan el mirador puesto —arriba del cuerpo o **dentro de una línea**, que es la
+puerta de atrás de las inversiones—.
+
+Las lecturas no se tocan: un `GET` con el mirador puesto es alguien **mirando**,
+que es justo para lo que está.
+
+### Lo que arrastra
+
+**La migración se deshace con otra migración.** Los productos que la #45 dio al
+mirador vuelven a **«todavía sin local»**, que es de donde el dueño los reparte
+(#45). Corre una vez, con su marca en `ajustes`; si corriera en cada arranque, un
+producto asignado a mano volvería a quedarse sin local solo.
+
+**Lo que no se puede deshacer solo, se dice.** Si hubiera movimientos apuntados en
+el mirador, esa mercancía dejaría de verse en el estante de nadie. No se tocan —un
+movimiento no se edita ni se borra (#2)— y mudarlos sería inventarse a cuál. Así
+que el servidor lo **avisa al arrancar**, con la cuenta.
+
+**Lo que no se reparte de una inversión se queda en el local de la caja que pagó**,
+y ya no en el almacén principal. No es una elección al azar: es el único local de
+la inversión que ya está decidido y comprobado.
+
+**Un producto que nace sin que nadie diga de quién es** —un aparato viejo que no
+manda el campo— es del local de quien lo crea, y si esa persona no tiene local, se
+queda **sin local**. Antes caía en el almacén principal, y allí no lo vería nadie.
+
+### En la pantalla
+
+En la **Caja**, estando en el mirador, se dice **«aquí no se vende»** y se apaga el
+buscador y la rejilla: dejar armar un carro que el servidor va a rechazar es hacer
+perder el tiempo y parecer roto.
+
+En el **Almacén**, estando en el mirador, se enseña **siempre la suma** —el
+desplegable de «solo lo que hay aquí / todo el negocio» desaparece, porque una de
+las dos opciones no significa nada— y no sale ningún botón de mover mercancía.
+
+En **Ajustes → La empresa**, la lista de sitios lo dice tal cual: «Solo para ver los
+totales de todos sumados. Aquí no se guarda ni se vende nada». Sin eso, no habría
+manera de entender por qué no sale en los desplegables.
+
+### Y de qué local es cada producto, en la propia fila
+
+Pedido el mismo día: «en Productos debe decir claramente por algún lado a dónde
+está asignado el producto». Va **el primero de la línea de abajo y con el color de
+la marca**, no perdido entre las categorías: es la pregunta que se le hace a esa
+pantalla. El que no tiene ninguno lo dice en rojo, que es lo que hay que ir
+arreglando; y si su local ya no existe, se dice también —así se entiende por qué no
+sale en ninguna parte—.
+
+`pruebas/locales.js` sube a **70 comprobaciones**: que el servidor niega las siete
+formas de escribir con el mirador puesto, que **mirar sí se puede**, y las dos
+mitades de la migración —que devuelve lo que el mirador se quedó, y que no vuelve a
+correr—.
+
+**Y diez bancos de pruebas usaban el mirador como su almacén de trabajo**, porque
+era el sitio que venía hecho. Ahora cada uno crea su «Almacén Central». Que las
+pruebas tuvieran que cambiar no es un fastidio: es la señal de que la regla nueva
+se está aplicando de verdad.
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía

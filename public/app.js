@@ -434,7 +434,7 @@ function rellenarLocalesDelCatalogo() {
   const antes = sel.value;
   sel.innerHTML = '<option value="">De cualquier local</option>' +
     '<option value="sin">Todavía sin local</option>' +
-    SITIOS.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join('');
+    sitiosReales().map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join('');
   sel.value = antes;
   if (sel.value !== antes) sel.value = '';   // el local se apagó: se vuelve a todos
 }
@@ -499,20 +499,26 @@ function renderLista() {
 
   $('lista').innerHTML = lista.length ? lista.map(p => {
     const excep = (p.precios || []).length;
+    // DE QUÉ LOCAL ES, EN LA PROPIA FILA y con su color, no perdido entre las
+    // categorías: lo pidió el dueño el 4-sep-2026 —«debe decir claramente por
+    // algún lado a dónde está asignado el producto»— y es la pregunta que se le
+    // hace a esta pantalla. Va primero, que es donde cae la vista.
+    //
+    // Un local que ya no está se dice tal cual en vez de dejar el hueco: así se
+    // entiende por qué ese producto no sale en ninguna parte.
+    const donde = !p.sitio_id ? 'Todavía sin local'
+      : ((SITIOS.find(x => x.id === p.sitio_id) || {}).nombre || 'Un local que ya no está');
     const sub = [p.categoria, p.um !== 'Unidad' ? p.um : null,
                  p.unidades_por_caja > 0 ? rotuloBulto(p) : null,
-                 excep ? excep + (excep === 1 ? ' precio especial' : ' precios especiales') : null,
-                 // Que se vea de un vistazo cuáles quedan por repartir (#45), y se
-                 // le dice a todo el mundo: es lo que explica por qué ese producto
-                 // no sale en la caja ni en el almacén.
-                 !p.sitio_id ? 'todavía sin local' : null]
+                 excep ? excep + (excep === 1 ? ' precio especial' : ' precios especiales') : null]
                 .filter(Boolean).join(' · ');
     return `<div class="prod" onclick="abrirFicha('${p.id}')">
       ${p.tiene_foto ? `<img class="miniFoto" src="${fotoDe(p)}" alt="" loading="lazy">`
                : `<span class="cod">${esc(p.codigo)}</span>`}
       <div class="info">
         <div class="nm">${esc(p.nombre)}${p.tiene_foto ? ' <span style="font-size:10.5px;color:var(--texto3)">' + esc(p.codigo) + '</span>' : ''}</div>
-        ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
+        <div class="sub"><span class="donde${p.sitio_id ? '' : ' sinLocal'}">${esc(donde)}</span>${
+          sub ? ' · ' + esc(sub) : ''}</div>
       </div>
       <div class="pre"><b class="num">${dinero(p.precio, p.precio_moneda || 'CUP')}</b>
         ${p.costo === null ? ''
@@ -654,8 +660,12 @@ function abrirFicha(id, copiar) {
   if ($('f-sitio')) {
     $('f-sitio').innerHTML =
       '<option value="">Todavía sin local — se lo pongo después</option>' +
-      SITIOS.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
-    $('f-sitio').value = p ? (p.sitio_id || '') : sitioActual();
+      sitiosReales().map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
+    // Estando en el mirador no se propone ningún local: ahí no se guarda nada, y
+    // proponerlo era justo lo que sobraba. Se queda en «todavía sin local» y se
+    // reparte desde esta misma pantalla (#48).
+    $('f-sitio').value = p ? (p.sitio_id || '')
+                          : (enElMirador() ? '' : sitioActual());
   }
 
   // La existencia inicial solo se pregunta al CREAR, y solo a quien puede mover
@@ -677,7 +687,7 @@ function abrirFicha(id, copiar) {
   // Excepciones de precio: una fila por sitio
   const precios = {};
   (p && p.precios || []).forEach(x => { precios[x.sitio_id] = x.precio; });
-  $('ficha-precios').innerHTML = SITIOS.map(s => `
+  $('ficha-precios').innerHTML = sitiosReales().map(s => `
     <div class="sitioPrecio">
       <span class="nmS">${esc(s.nombre)}</span>
       <input type="number" inputmode="decimal" data-sitio="${s.id}"
@@ -1123,6 +1133,23 @@ function renderResultados() {
   const q = ($('caja-busq').value || '').trim().toLowerCase();
   const cat = $('caja-cat') ? $('caja-cat').value : '';
   const cont = $('caja-resultados');
+
+  // EN EL MIRADOR NO SE VENDE (#48). Se dice y se apaga la caja entera —el
+  // buscador, los filtros y la rejilla—: dejar armar un carro que el servidor va
+  // a rechazar es hacer perder el tiempo y parecer roto.
+  const mirando = enElMirador();
+  const cajaVisible = m => {
+    if ($('caja-mirador')) $('caja-mirador').style.display = m ? 'block' : 'none';
+    if ($('caja-mirador-nombre'))
+      $('caja-mirador-nombre').textContent =
+        (SITIOS.find(x => esMirador(x.id)) || {}).nombre || 'El almacén principal';
+    const buscador = $('caja-busq').closest('.buscador');
+    if (buscador) buscador.style.display = m ? 'none' : '';
+    const filtros = $('caja-cat') && $('caja-cat').closest('.filtros');
+    if (filtros) filtros.style.display = m ? 'none' : '';
+  };
+  cajaVisible(mirando);
+  if (mirando) { cont.innerHTML = ''; return; }
   // Solo los de este local (#45): quien despacha no tiene por qué buscar entre los
   // productos de las otras tiendas para encontrar los que tiene delante.
   let lista = productosAqui();
@@ -1740,15 +1767,23 @@ let FONDO = null;          // lo último que contestó /api/fondo
 // lleva las cuentas de todo, y lo que quiere ver de entrada es el conjunto.
 // Quien está en un punto ve lo suyo, que es de lo que responde. Sigue siendo un
 // desplegable: esto es con qué empieza, no lo único que se puede mirar.
-// Cuál es el almacén principal se decide igual que en el servidor —el primer
-// almacén que se creó—, no por el nombre ni por un identificador escrito a
-// mano: aquí hay tres almacenes (Principal, Iglesia y Brigada) y si cada lado
-// eligiera uno distinto, la mercancía sin repartir de una inversión entraría en
-// un sitio y se enseñaría en otro.
-const sitioPrincipal = () => (SITIOS
-  .filter(s => s.tipo === 'almacen' && s.activo !== 0)
-  .sort((a, b) => (a.creado_en || '') < (b.creado_en || '') ? -1 : 1)[0] || {}).id;
-const enElMirador = () => sitioActual() === sitioPrincipal();
+// Cuál es el mirador se decide igual que en el servidor y por su identificador,
+// no por ser «el almacén más viejo»: con esa segunda regla, el día que alguien
+// apagara ese sitio el mirador pasaría a ser un almacén de verdad y se quedaría
+// mudo de golpe. Y si cada lado eligiera uno distinto, la aplicación enseñaría
+// una cosa y el servidor guardaría otra.
+const MIRADOR = 'principal';
+const esMirador = id => id === MIRADOR;
+const sitioPrincipal = () => MIRADOR;
+const enElMirador = () => sitioActual() === MIRADOR;
+
+// LOS LOCALES DE VERDAD: todos menos el mirador (DECISIONES.md #48). Es la lista
+// que va en cada desplegable de «dónde pasa esto»: a qué local es un producto, a
+// dónde se transfiere, de qué caja sale el dinero, en qué local trabaja alguien.
+//
+// El mirador SÍ sigue en el desplegable de arriba, el de «dónde estoy mirando»,
+// porque es justo para lo que existe: ponerse ahí y ver los totales de todos.
+const sitiosReales = () => SITIOS.filter(s => !esMirador(s.id));
 
 function pestanaInforme(cual, btn) {
   document.querySelectorAll('#p-ventas .pestanas button').forEach(b => b.classList.remove('activa'));
@@ -2487,13 +2522,18 @@ async function cargarAlmacen() {
   //
   // Así que con un solo sitio el desplegable no se enseña, y vuelve solo el día
   // que se cree un punto de venta. Nada que configurar.
-  const variosSitios = SITIOS.filter(s => s.activo !== 0).length > 1;
-  $('alm-alcance-caja').style.display = variosSitios ? '' : 'none';
+  // El mirador no cuenta: no es un sitio entre los que repartir (#48).
+  const variosSitios = sitiosReales().filter(s => s.activo !== 0).length > 1;
+  // ESTANDO EN EL MIRADOR NO HAY NADA QUE ELEGIR: ahí no hay estante, solo la
+  // suma de todos (#48). El desplegable de «solo lo que hay aquí / todo el
+  // negocio» desaparece, porque una de las dos opciones no significa nada.
+  $('alm-alcance-caja').style.display =
+    (variosSitios && !enElMirador()) ? '' : 'none';
   // Transferir es mandar mercancía a OTRO sitio: sin otro sitio no hay destino.
   // Se mira también el permiso, porque este renglón pisa lo que dejó puesto
   // aplicarPermisos() al entrar.
   $('btn-despachar').style.display =
-    (variosSitios && puedo('traslados_enviar')) ? '' : 'none';
+    (variosSitios && !enElMirador() && puedo('traslados_enviar')) ? '' : 'none';
 
   // El Almacén abre SIEMPRE en «solo lo que hay aquí», también en el almacén
   // principal. Lo pidió el dueño el 1-sep-2026: lo primero que quiere ver al
@@ -2515,6 +2555,8 @@ async function cargarAlmacen() {
   // «todos» de una temporada en que sí había dos sitios: lo escondido no se
   // puede corregir a mano.
   if (!variosSitios) $('alm-alcance').value = 'sitio';
+  // En el mirador, al revés: siempre la suma, que es lo único que hay ahí.
+  if (enElMirador()) $('alm-alcance').value = 'todos';
   await cargarStock();
   await cargarStockTotal();
   try {
@@ -2867,7 +2909,7 @@ async function guardarMov() {
 // ─── Transferencia ────────────────────────────────────────────────
 function abrirDespacho() {
   DESPACHO = [];
-  const otros = SITIOS.filter(s => s.id !== sitioActual());
+  const otros = sitiosReales().filter(s => s.id !== sitioActual());
   if (!otros.length) { alert('Todavía no hay otro sitio al que transferir.\n\nCrea un punto de venta en Ajustes.'); return; }
   $('des-destino').innerHTML = otros.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
   $('des-busq').value = ''; $('des-obs').value = '';
@@ -3182,7 +3224,7 @@ async function abrirCobrarVenta(ventaId) {
   $('cv-importe').value = '';
   $('cv-nota').value = '';
   $('cv-aviso').innerHTML = '';
-  $('cv-sitio').innerHTML = SITIOS.map(x =>
+  $('cv-sitio').innerHTML = sitiosReales().map(x =>
     `<option value="${x.id}"${x.id === v.sitio_id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('');
   // Los pagos que ya trajo, para poder discutirlos con el cliente delante: «el
   // martes trajiste mil» es una conversación que necesita la lista, no el total.
@@ -3933,7 +3975,7 @@ function cerrarOrigen() { $('velo-origen').classList.remove('abierto'); }
 // No es un retiro: el dinero no sale del negocio, cambia de sitio. Se apunta
 // como dos mitades y el fondo general no se mueve.
 function abrirTraspaso() {
-  const activos = SITIOS.filter(s => s.activo !== 0);
+  const activos = sitiosReales().filter(s => s.activo !== 0);
   if (activos.length < 2) return toast('⚠ Hace falta más de un sitio para poder pasar dinero');
   const ops = activos.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
   $('tr-origen').innerHTML = ops;
@@ -4004,7 +4046,7 @@ function abrirFondo(tipo, apunte) {
   const entra = tipo === 'ingreso';
   $('fo-sitio-lbl').textContent = entra ? 'Entra en la caja de *' : 'Sale de la caja de *';
   $('fo-sitio').innerHTML = '<option value="">Elige…</option>' +
-    SITIOS.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
+    sitiosReales().map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
   // Viene puesta la caja del sitio en el que se está trabajando, que es por donde
   // pasa el dinero nueve de cada diez veces.
   if (SITIOS.some(s => s.id === sitioActual())) $('fo-sitio').value = sitioActual();
@@ -4249,7 +4291,7 @@ async function abrirInversion(id) {
   // puesta la del sitio en el que se está trabajando, que es de donde sale el
   // dinero nueve de cada diez veces.
   $('iv-sitio').innerHTML = '<option value="">Elige…</option>' +
-    SITIOS.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
+    sitiosReales().map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
   $('iv-sitio').value = (i && i.sitio_id)
     || (SITIOS.some(s => s.id === sitioActual()) ? sitioActual() : '');
   $('iv-titulo').textContent = i ? 'Inversión ' + (i.numero || '') : 'Nueva inversión';
@@ -4371,7 +4413,7 @@ function renderLineasInversion() {
       </div>
       <div class="fila"><span>Importe</span><b class="num">${dinero(l.cantidad * l.costo_unit, m)}</b></div>
       <label class="lbl">A dónde va</label>
-      ${SITIOS.map(s => {
+      ${sitiosReales().map(s => {
         const r = (l.reparto || []).find(x => x.sitio_id === s.id);
         return `<div class="sitioPrecio">
           <span class="nmS">${esc(s.nombre)}</span>
@@ -5131,7 +5173,7 @@ function abrirCargo(id) {
   // Dónde valen los permisos de este cargo.
   $('cg-alcance').value = (c && c.alcance) || 'propio';
   const marcados = String((c && c.sitios) || '').split(',').map(s => s.trim()).filter(Boolean);
-  $('cg-sitios').innerHTML = SITIOS.map(s => `
+  $('cg-sitios').innerHTML = sitiosReales().map(s => `
     <label class="permiso"><input type="checkbox" value="${s.id}"${
       marcados.includes(s.id) ? ' checked' : ''}> ${esc(s.nombre)}</label>`).join('');
   alElegirAlcance();
@@ -5349,7 +5391,7 @@ function abrirPersona(id) {
   $('pe-pin-lbl').textContent = p ? 'PIN nuevo (dejar vacío para no cambiarlo)' : 'PIN *';
   $('pe-cargo').innerHTML = CARGOS.map(c =>
     `<option value="${c.id}"${p && p.cargo_id === c.id ? ' selected' : ''}>${esc(c.nombre)}</option>`).join('');
-  $('pe-sitio').innerHTML = '<option value="">Cualquiera</option>' + SITIOS.map(s =>
+  $('pe-sitio').innerHTML = '<option value="">Cualquiera</option>' + sitiosReales().map(s =>
     `<option value="${s.id}"${p && p.sitio_id === s.id ? ' selected' : ''}>${esc(s.nombre)}</option>`).join('');
   $('pe-moneda-pago').value = (p && p.moneda_pago) || '';
   $('pe-activo-caja').style.display = p ? 'block' : 'none';
@@ -5514,7 +5556,7 @@ function abrirPagoCom(personaId) {
   // Por defecto, la caja del sitio donde se está: es de donde sale el dinero de
   // la mano. El hueco vacío significa «de la empresa», como en los retiros.
   $('pc-sitio').innerHTML = '<option value="">De la empresa (sin sitio)</option>' +
-    SITIOS.map(s => `<option value="${s.id}"${s.id === sitioActual() ? ' selected' : ''}>${
+    sitiosReales().map(s => `<option value="${s.id}"${s.id === sitioActual() ? ' selected' : ''}>${
       esc(s.nombre)}</option>`).join('');
   $('velo-pagocom').classList.add('abierto');
 }
@@ -5589,7 +5631,7 @@ function pintarQueExportar() {
   if (!sel) return;
   const antes = sel.value;
   sel.innerHTML = '<option value="">Todo el negocio — todos los almacenes y puntos</option>' +
-    SITIOS.filter(s => s.activo !== 0)
+    sitiosReales().filter(s => s.activo !== 0)
       .map(s => `<option value="${s.id}">Solo ${esc(s.nombre)}</option>`).join('');
   sel.value = antes;
   if (sel.value !== antes) sel.value = '';
@@ -5679,9 +5721,9 @@ function abrirSitio() {
   $('s-nombre').value = '';
   $('s-tipo').value = 'punto';
   $('s-padre').innerHTML = '<option value="">Independiente</option>' +
-    SITIOS.filter(s => s.tipo === 'almacen')
+    sitiosReales().filter(s => s.tipo === 'almacen')
       .map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
-  const almacenes = SITIOS.filter(s => s.tipo === 'almacen');
+  const almacenes = sitiosReales().filter(s => s.tipo === 'almacen');
   if (almacenes.length) $('s-padre').value = almacenes[0].id;
   $('velo-sitio').classList.add('abierto');
   setTimeout(() => $('s-nombre').focus(), 120);
@@ -5867,9 +5909,14 @@ async function cargarEstado() {
     SALUD = d;
   } catch (e) { /* sin conexión: las cifras se quedan con la raya, y ya se ve */ }
 
+  // El mirador se dice tal cual, para que se entienda por qué no sale en los
+  // desplegables de «dónde pasa esto» (#48).
   $('lista-sitios').innerHTML = SITIOS.map(s => `<div class="fila">
-    <span>${esc(s.nombre)}</span>
-    <b style="font-size:12px;color:var(--texto3)">${s.tipo === 'almacen' ? 'Almacén' : 'Punto de venta'}</b>
+    <span>${esc(s.nombre)}${esMirador(s.id)
+      ? '<br><span class="pista" style="margin:0">Solo para ver los totales de todos ' +
+        'sumados. Aquí no se guarda ni se vende nada.</span>' : ''}</span>
+    <b style="font-size:12px;color:var(--texto3)">${esMirador(s.id) ? 'Los totales'
+      : s.tipo === 'almacen' ? 'Almacén' : 'Punto de venta'}</b>
   </div>`).join('') || '<div class="vacio">Sin sitios</div>';
 
   // La tarjeta del sello solo si esta copia lo tiene. Una copia detrás de

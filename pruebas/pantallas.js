@@ -201,9 +201,13 @@ comp('y el filtro abre en «Todo el catálogo», que va el primero',
 // aplicación el 1-sep-2026: entraba, veía «Todo el negocio, sumado», ni un
 // botón, y una lista vacía.
 comp('con un solo sitio, el desplegable de alcance no se enseña',
-  /const variosSitios = SITIOS\.filter\(s => s\.activo !== 0\)\.length > 1/.test(js) &&
-  /\$\('alm-alcance-caja'\)\.style\.display = variosSitios \? '' : 'none'/.test(js) &&
+  /const variosSitios = sitiosReales\(\)\.filter\(s => s\.activo !== 0\)\.length > 1/.test(js) &&
+  /\$\('alm-alcance-caja'\)\.style\.display =\s*\(variosSitios && !enElMirador\(\)\) \? '' : 'none'/.test(js) &&
   /id="alm-alcance-caja"/.test(html));
+// Y el mirador no cuenta como sitio para esto: no es un local entre los que
+// repartir, es desde donde se miran todos (#48).
+comp('y el almacén principal no cuenta como sitio al contarlos',
+  /const sitiosReales = \(\) => SITIOS\.filter\(s => !esMirador\(s\.id\)\)/.test(js));
 comp('y entonces el alcance se queda en «lo que hay aquí», pase lo que pase',
   /if \(!variosSitios\) \$\('alm-alcance'\)\.value = 'sitio'/.test(js));
 // Que es lo que hace aparecer los botones: cambiarAlcanceAlmacen esconde la fila
@@ -211,7 +215,7 @@ comp('y entonces el alcance se queda en «lo que hay aquí», pase lo que pase',
 comp('los botones de Entrada y Merma cuelgan del alcance, no del permiso a secas',
   /\$\('alm-acciones'\)\.style\.display = todos \? 'none' : 'flex'/.test(js));
 comp('despachar se esconde cuando no hay otro sitio al que mandar',
-  /\$\('btn-despachar'\)\.style\.display =[\s\S]{0,120}variosSitios && puedo\('traslados_enviar'\)/.test(js) &&
+  /\$\('btn-despachar'\)\.style\.display =[\s\S]{0,160}variosSitios && !enElMirador\(\) && puedo\('traslados_enviar'\)/.test(js) &&
   /id="btn-despachar"/.test(html));
 
 // Y cuando la lista sale vacía, decir cuál de las dos cosas es. El almacén abre
@@ -653,6 +657,54 @@ comp('en index.html no se nombran las tripas ni ninguna carpeta del disco', !tri
 // Y que el servidor no MANDE la carpeta de las copias, que es por donde entró:
 // mientras viaje al aparato, cualquier día alguien vuelve a pintarla.
 comp('la carpeta de las copias no sale del servidor', !/carpeta: RUTA_SALVAS/.test(servidor));
+
+
+console.log('\n=== El almacén principal es el mirador, no un sitio ===');
+// Pedido por el dueño el 4 de septiembre de 2026, después de desplegar la #45:
+// «el almacén principal es solo para sumar lo de todos los almacenes, ahí no se
+// asigna nada; ni en dinero ni en productos se mueve nada por él». Lo vio en el
+// desplegable de «Este producto es de», que se lo ofrecía (#48).
+comp('el mirador se reconoce por su identificador, no por ser el más viejo',
+  /const MIRADOR = 'principal'/.test(js) &&
+  /const esMirador = id => id === MIRADOR/.test(js) &&
+  /const MIRADOR = 'principal'/.test(servidor) &&
+  /const esMirador = id => String\(id \|\| ''\) === MIRADOR/.test(servidor));
+comp('hay una lista de locales de verdad, sin él',
+  /const sitiosReales = \(\) => SITIOS\.filter\(s => !esMirador\(s\.id\)\)/.test(js));
+// La ficha del producto es donde lo vio.
+comp('la ficha no ofrece el mirador como local',
+  /\$\('f-sitio'\)\.innerHTML =[\s\S]{0,160}sitiosReales\(\)\.map/.test(js));
+comp('y estando en él no propone ninguno: se queda «todavía sin local»',
+  /\$\('f-sitio'\)\.value = p \? \(p\.sitio_id \|\| ''\)\s*:\s*\(enElMirador\(\) \? '' : sitioActual\(\)\)/.test(js));
+// Y ningún otro desplegable de «dónde pasa esto» lo ofrece. Se cuentan los que
+// quedan mirando SITIOS a pelo: los que quedan son los de mirar, no los de hacer.
+const pickersCrudos = (js.match(/SITIOS\.map\(/g) || []).length;
+comp('ningún desplegable de «dónde pasa esto» lo sigue ofreciendo',
+  pickersCrudos === 1, pickersCrudos + ' quedan mirando SITIOS a pelo');
+// En la caja no se vende desde ahí, y se dice antes de armar un carro que el
+// servidor va a rechazar.
+comp('en la caja se dice que ahí no se vende, y se apaga la caja',
+  /id="caja-mirador"/.test(html) &&
+  /const mirando = enElMirador\(\);/.test(js) &&
+  /if \(mirando\) \{ cont\.innerHTML = ''; return; \}/.test(js));
+// En el almacén, estando ahí, siempre la suma y ningún botón de mover nada.
+comp('en el almacén se enseña siempre la suma, y sin botones',
+  /if \(enElMirador\(\)\) \$\('alm-alcance'\)\.value = 'todos'/.test(js));
+// Y el servidor lo niega, que es lo único que manda (#10).
+comp('el servidor no deja escribir nada con el mirador puesto',
+  /En ' \+ nombre \+ ' no se guarda nada/.test(servidor) &&
+  /if \(req\.method === 'GET'\) return next\(\);/.test(servidor));
+comp('y la migración devuelve a «sin local» lo que se le había dado',
+  /mirador_no_es_un_sitio/.test(servidor) &&
+  /UPDATE productos SET sitio_id=NULL WHERE sitio_id='principal'/.test(servidor));
+
+// DE QUÉ LOCAL ES CADA PRODUCTO, EN LA PROPIA FILA. «Debe decir claramente por
+// algún lado a dónde está asignado el producto», dijo el mismo día.
+comp('cada producto dice de qué local es, en su fila y con su color',
+  /class="donde\$\{p\.sitio_id \? '' : ' sinLocal'\}"/.test(js) &&
+  /\.prod \.sub \.donde\{/.test(css) && /\.prod \.sub \.donde\.sinLocal\{/.test(css));
+comp('y el que no tiene ninguno lo dice también',
+  /const donde = !p\.sitio_id \? 'Todavía sin local'/.test(js));
 
 console.log('\n=== Las palabras de la pantalla ===');
 // Pedido por el dueño: «hay palabras que no son muy profesionales».

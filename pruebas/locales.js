@@ -1,4 +1,5 @@
-// CADA LOCAL VE SUS PRODUCTOS (DECISIONES.md #45).
+// CADA LOCAL VE SUS PRODUCTOS (DECISIONES.md #45), Y EL ALMACÉN PRINCIPAL NO ES
+// UN LOCAL: ES EL MIRADOR (#48).
 //
 // Pedido por el dueño el 4 de septiembre de 2026: «los productos se crean en su
 // apartado de productos y se asignan a los almacenes», con el almacén principal
@@ -27,6 +28,12 @@
 //     no se lo quite sin querer;
 //   · que la casilla de «¿cuánto tienes ahora?» aparezca y desaparezca con el
 //     local, porque la mercancía tiene que estar EN algún sitio;
+//   · que el ALMACÉN PRINCIPAL, que es el que siembra la aplicación, no acepte
+//     nada: ni que se le asigne un producto, ni mercancía, ni una venta, ni
+//     dinero, ni el reparto escondido dentro de una línea de inversión; pero que
+//     MIRAR sí se pueda, que es justo para lo que existe;
+//   · que la migración devuelva a «sin local» lo que aquella otra le dio, y que
+//     no vuelva a correr;
 //   · y que DUPLICAR un producto abra una ficha para crear OTRO, no para cambiar
 //     el que se copió, que es la forma de perder el original sin enterarse.
 //
@@ -140,15 +147,21 @@ function fichaDeProducto(productos, sitios, local, permisos) {
   const nada = () => {};
   const puedo = (...cuales) => cuales.every(c => (permisos || ['*']).includes('*') ||
     (permisos || []).includes(c));
+  // sitiosReales y enElMirador se le dan hechos, con la MISMA regla que la
+  // aplicación: la ficha ya no ofrece el mirador como local, y eso es justo una de
+  // las cosas que hay que comprobar aquí.
   const hazlo = new Function('$', 'PRODUCTOS', 'SITIOS', 'puedo', 'esc', 'sitioActual',
     'MONEDA_BASE', 'pintarFoto', 'ponerListasDelProducto', 'equivalenciaCosto',
-    'equivalencia', 'alCambiarComision', 'setTimeout',
+    'equivalencia', 'alCambiarComision', 'setTimeout', 'sitiosReales', 'enElMirador',
+    'esMirador',
     'let editando = null, FICHA_PRODUCTO = null, fotoActual, fichaNaciendo = false;\n' +
     js.slice(desde, hasta) +
     '\nreturn { abrirFicha, alCambiarLocalDeLaFicha, localDeLaFicha,' +
     ' estado: () => ({ editando, FICHA_PRODUCTO, fotoActual, fichaNaciendo }) };');
+  const esMirador = id => id === 'principal';
   const api = hazlo($, productos, sitios, puedo, x => String(x == null ? '' : x),
-    () => local, 'CUP', nada, nada, nada, nada, nada, nada);
+    () => local, 'CUP', nada, nada, nada, nada, nada, nada,
+    () => sitios.filter(x => !esMirador(x.id)), () => esMirador(local), esMirador);
   return Object.assign({}, api, { campos });
 }
 
@@ -163,16 +176,22 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     const ses = await post('/api/auth/entrar', { usuario: 'jefe', pin: '1234' });
     cab = { Authorization: 'Bearer ' + ses.cuerpo.token };
 
-    console.log('\n=== Tres locales: el almacén principal, y dos tiendas ===');
+    console.log('\n=== El mirador, un almacén de verdad y dos tiendas ===');
+    // EL «ALMACÉN PRINCIPAL» QUE SIEMBRA LA APLICACIÓN NO ES UN SITIO: es el
+    // mirador, desde donde se ven los totales de todos sumados (#48). Los locales
+    // de verdad son los que crea el dueño.
     const sitios = (await pedir('/api/sitios')).cuerpo;
     const PRINCIPAL = sitios[0].id;
-    comp('el almacén principal está', !!PRINCIPAL, JSON.stringify(sitios));
+    comp('el mirador está, y es el que siembra la aplicación', PRINCIPAL === 'principal',
+      JSON.stringify(sitios.map(x => x.id)));
+    const ALMACEN = (await debe('/api/sitios', { nombre: 'Almacén Central', tipo: 'almacen' },
+      'el almacén')).id;
     const TIENDA = (await debe('/api/sitios', { nombre: 'Tienda', tipo: 'punto' }, 'la tienda')).id;
     const KIOSCO = (await debe('/api/sitios', { nombre: 'Kiosco', tipo: 'punto' }, 'el kiosco')).id;
 
     console.log('\n=== Cada producto nace del local que lo crea ===');
     const refresco = (await debe('/api/productos',
-      { nombre: 'Refresco de cola', precio: 300, sitio_id: PRINCIPAL }, 'el refresco')).id;
+      { nombre: 'Refresco de cola', precio: 300, sitio_id: ALMACEN }, 'el refresco')).id;
     const galleta = (await debe('/api/productos',
       { nombre: 'Galleta', precio: 500, sitio_id: TIENDA }, 'la galleta')).id;
     const cerveza = (await debe('/api/productos',
@@ -180,17 +199,20 @@ function fichaDeProducto(productos, sitios, local, permisos) {
 
     const de = async id => ((await pedir('/api/productos')).cuerpo.productos || [])
       .find(p => p.id === id) || {};
-    comp('el refresco es del almacén', (await de(refresco)).sitio_id === PRINCIPAL);
+    comp('el refresco es del almacén', (await de(refresco)).sitio_id === ALMACEN);
     comp('la galleta es de la tienda', (await de(galleta)).sitio_id === TIENDA);
     comp('la cerveza es del kiosco', (await de(cerveza)).sitio_id === KIOSCO);
 
     console.log('\n=== Sin local puesto, el producto es del local de quien lo crea ===');
     // El aparato manda siempre el local, pero un aparato viejo puede no hacerlo:
-    // entonces manda el servidor, y no puede dejar el producto sin local.
+    // entonces manda el servidor, que pone el de quien lo crea. Y si quien lo crea
+    // no tiene local —el dueño, que trabaja en todos—, el producto nace SIN LOCAL
+    // y no en el mirador, que no guarda nada (#48). Sin local se ve en Productos,
+    // que es desde donde se reparte; en el mirador no se veria en ninguna parte.
     const sinDecir = (await debe('/api/productos',
       { nombre: 'Servilleta', precio: 5 }, 'la servilleta')).id;
-    comp('cae en el almacén principal, no en ninguna parte',
-      (await de(sinDecir)).sitio_id === PRINCIPAL, (await de(sinDecir)).sitio_id);
+    comp('el jefe no tiene local, así que el producto nace sin local',
+      (await de(sinDecir)).sitio_id === null, (await de(sinDecir)).sitio_id);
 
     console.log('\n=== Y sin local A PROPÓSITO, para ponérselo después ===');
     // Mandar el local VACÍO y NO MANDARLO son dos cosas distintas y no se pueden
@@ -348,13 +370,13 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     comp('recién creado, en ninguno: nadie ha tenido mercancía suya',
       (await de(refresco)).sitios.length === 0);
 
-    await debe('/api/movimientos', { tipo: 'compra', sitio_id: PRINCIPAL,
+    await debe('/api/movimientos', { tipo: 'compra', sitio_id: ALMACEN,
       producto_id: refresco, cantidad: 10, costo_unit: 200 }, 'la entrada de refrescos');
     comp('entra mercancía en el almacén y el refresco se ve allí',
-      (await de(refresco)).sitios.join() === PRINCIPAL);
+      (await de(refresco)).sitios.join() === ALMACEN);
 
     console.log('\n=== El almacén despacha a la tienda, y la tienda puede venderlo ===');
-    const tras = await debe('/api/traslados', { origen_id: PRINCIPAL, destino_id: TIENDA,
+    const tras = await debe('/api/traslados', { origen_id: ALMACEN, destino_id: TIENDA,
       lineas: [{ producto_id: refresco, cantidad: 4 }] }, 'el traslado');
     comp('mientras va de camino, la tienda todavía no lo ve',
       !(await de(refresco)).sitios.includes(TIENDA));
@@ -363,7 +385,7 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     comp('recibido, el refresco ya es también de la tienda',
       (await de(refresco)).sitios.includes(TIENDA), JSON.stringify((await de(refresco)).sitios));
     comp('y sigue siendo del almacén: el dueño no cambia al mover una caja',
-      (await de(refresco)).sitio_id === PRINCIPAL);
+      (await de(refresco)).sitio_id === ALMACEN);
     comp('el kiosco sigue sin verlo',
       !(await de(refresco)).sitios.includes(KIOSCO));
 
@@ -381,7 +403,7 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     const catFinal = await catalogo();
     const enTienda = mirandoDesde(TIENDA, false, catFinal).veAqui;
     const enKiosco = mirandoDesde(KIOSCO, false, catFinal).veAqui;
-    const enElAlmacen = mirandoDesde(PRINCIPAL, true, catFinal).veAqui;
+    const enElMiradorVe = mirandoDesde(PRINCIPAL, true, catFinal).veAqui;
 
     const R = await de(refresco), G = await de(galleta), C = await de(cerveza);
     comp('la tienda ve lo suyo', enTienda(G));
@@ -389,8 +411,8 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     comp('la tienda NO ve lo del kiosco', !enTienda(C));
     comp('el kiosco NO ve lo de la tienda', !enKiosco(G));
     comp('el kiosco NO ve el refresco: nunca le llegó', !enKiosco(R));
-    comp('el almacén principal lo ve todo',
-      enElAlmacen(R) && enElAlmacen(G) && enElAlmacen(C));
+    comp('desde el mirador se ve todo, que es para lo que existe',
+      enElMiradorVe(R) && enElMiradorVe(G) && enElMiradorVe(C));
     comp('un producto sin local no se ve en ningún local',
       !enTienda({ sitio_id: null, sitios: [] }) && !enKiosco({ sitio_id: '', sitios: [] }));
     comp('pero sin local Y con mercancía en la tienda, la tienda lo sigue viendo',
@@ -408,25 +430,81 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     comp('y mirando solo la tienda, no sale lo del kiosco',
       !soloTienda.some(p => p.id === cerveza));
 
-    console.log('\n=== Lo que ya estaba escrito pasa al almacén principal ===');
-    // Los productos de antes no tenían local. La migración se los da al principal
-    // UNA VEZ; si corriera en cada arranque, un producto que el dueño hubiera
-    // movido a mano a su tienda volvería al almacén solo.
-    const db = require('better-sqlite3')(path.join(patio, 'app.db'));
-    db.prepare('UPDATE productos SET sitio_id=NULL WHERE id=?').run(cerveza);
-    db.prepare('UPDATE productos SET sitio_id=? WHERE id=?').run(TIENDA, refresco);
+    console.log('\n=== En el mirador no se guarda nada, y lo dice el SERVIDOR ===');
+    // El «Almacén Principal» que siembra la aplicación no es un local: es desde
+    // donde se ven los totales de todos sumados (#48). Se comprueba en el servidor
+    // y no escondiendo opciones en la pantalla, que es decoración (#10): un
+    // teléfono con el código viejo en su caché sigue ofreciéndolo en cada
+    // desplegable, y sin esto colaría.
+    const alMirador = (ruta, cuerpo) => post(ruta, cuerpo).then(r => r.status);
+    comp('un producto no se puede asignar al mirador',
+      (await alMirador('/api/productos',
+        { nombre: 'Fantasma', precio: 1, sitio_id: PRINCIPAL })) === 400);
+    const cambiarlo = await pedir('/api/productos/' + galleta, { method: 'PUT',
+      body: JSON.stringify({ nombre: 'Galleta', precio: 500, sitio_id: PRINCIPAL }) });
+    comp('ni mudarlo al mirador después', cambiarlo.status === 400,
+      cambiarlo.status + ' ' + JSON.stringify(cambiarlo.cuerpo));
+    comp('y el producto se queda donde estaba',
+      (await de(galleta)).sitio_id === TIENDA, (await de(galleta)).sitio_id);
+    comp('no entra mercancía en el mirador',
+      (await alMirador('/api/movimientos', { tipo: 'compra', sitio_id: PRINCIPAL,
+        producto_id: galleta, cantidad: 5, costo_unit: 1 })) === 400);
+    comp('no se le transfiere nada',
+      (await alMirador('/api/traslados', { origen_id: TIENDA, destino_id: PRINCIPAL,
+        lineas: [{ producto_id: galleta, cantidad: 1 }] })) === 400);
+    comp('ni sale nada de él',
+      (await alMirador('/api/traslados', { origen_id: PRINCIPAL, destino_id: TIENDA,
+        lineas: [{ producto_id: galleta, cantidad: 1 }] })) === 400);
+    comp('no se vende desde el mirador',
+      (await alMirador('/api/ventas', { sitio_id: PRINCIPAL, moneda: 'CUP',
+        lineas: [{ producto_id: galleta, cantidad: 1 }] })) === 400);
+    comp('no pasa dinero por su caja',
+      (await alMirador('/api/fondo', { tipo: 'ingreso', moneda: 'CUP', importe: 10,
+        sitio_id: PRINCIPAL, concepto: 'Prueba' })) === 400);
+    // Y una inversión no puede colar el mirador por la puerta de atrás, que va
+    // dentro de las líneas y no arriba del cuerpo.
+    comp('ni una inversión, que lo lleva escondido dentro de una línea',
+      (await alMirador('/api/inversiones', { nombre: 'Compra', moneda: 'CUP',
+        sitio_id: TIENDA, lineas: [{ producto_id: galleta, cantidad: 2, costo_unit: 1,
+          reparto: [{ sitio_id: PRINCIPAL, cantidad: 2 }] }] })) === 400);
+    // MIRAR sí se puede: es justo para lo que existe.
+    comp('pero mirar sí se puede, que es para lo que está',
+      (await pedir('/api/stock?sitio_id=' + PRINCIPAL)).status === 200);
+
+    console.log('\n=== La migración devuelve a su sitio lo que el mirador se quedó ===');
+    // La #45 traía de la otra aplicación una migración que daba al mirador los
+    // productos sin local. Allí está bien —allí ES un almacén de verdad—; aquí no,
+    // y esta la deshace: los devuelve a «todavía sin local», que es de donde el
+    // dueño los reparte.
+    const abrirBase = () => require('better-sqlite3')(path.join(patio, 'app.db'));
+    const reiniciar = async () => {
+      cerrarTodo();
+      const puerto = await puertoLibre();
+      BASE = 'http://127.0.0.1:' + puerto;
+      await arrancar({ PUERTO: puerto, DP_DB: path.join(patio, 'app.db'), DP_HTTP: '1' },
+                     /D´Padrones/);
+      const ses = await post('/api/auth/entrar', { usuario: 'jefe', pin: '1234' });
+      cab = { Authorization: 'Bearer ' + ses.cuerpo.token };
+    };
+
+    let db = abrirBase();
+    db.prepare("UPDATE productos SET sitio_id='principal' WHERE id=?").run(cerveza);
+    db.prepare("DELETE FROM ajustes WHERE clave='mirador_no_es_un_sitio'").run();
     db.close();
-    cerrarTodo();
-    const puerto2 = await puertoLibre();
-    BASE = 'http://127.0.0.1:' + puerto2;
-    await arrancar({ PUERTO: puerto2, DP_DB: path.join(patio, 'app.db'), DP_HTTP: '1' },
-                   /D´Padrones/);
-    const ses2 = await post('/api/auth/entrar', { usuario: 'jefe', pin: '1234' });
-    cab = { Authorization: 'Bearer ' + ses2.cuerpo.token };
-    comp('la migración NO vuelve a correr: el refresco se queda donde lo pusieron',
-      (await de(refresco)).sitio_id === TIENDA, (await de(refresco)).sitio_id);
-    comp('y por eso la cerveza se queda sin local, que es lo de fiarse de la marca',
-      !(await de(cerveza)).sitio_id);
+    await reiniciar();
+    comp('un producto que se quedó en el mirador vuelve a «sin local»',
+      (await de(cerveza)).sitio_id === null, (await de(cerveza)).sitio_id);
+    comp('y los demás no se tocan',
+      (await de(refresco)).sitio_id === ALMACEN, (await de(refresco)).sitio_id);
+
+    // Y corre UNA VEZ. Si corriera en cada arranque, un producto que alguien
+    // pusiera a mano donde toca volvería a quedarse sin local solo.
+    db = abrirBase();
+    db.prepare('UPDATE productos SET sitio_id=? WHERE id=?').run(TIENDA, cerveza);
+    db.close();
+    await reiniciar();
+    comp('la migración NO vuelve a correr: lo asignado se queda asignado',
+      (await de(cerveza)).sitio_id === TIENDA, (await de(cerveza)).sitio_id);
 
     console.log('\n' + (mal ? 'HAY ' + mal + ' FALLO(S): ' : 'TODO BIEN: ') +
                 (ok + mal) + ' comprobaciones');

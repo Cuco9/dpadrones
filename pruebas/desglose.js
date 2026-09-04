@@ -137,7 +137,11 @@ const RENGLONES = ['de_ventas', 'de_otros', 'recibido',
     await post('/api/auth/crear-admin', { nombre: 'Jefe', usuario: 'jefe', pin: '1234' });
     const ses = await post('/api/auth/entrar', { usuario: 'jefe', pin: '1234' });
     cab = { Authorization: 'Bearer ' + ses.cuerpo.token };
-    const almacen = (await pedir('/api/sitios')).cuerpo[0].id;
+    // El «Almacén Principal» que siembra la aplicación es el MIRADOR: desde ahí se
+    // ven los totales de todos sumados y no se guarda nada (DECISIONES.md #48).
+    // El almacén de verdad, el que tiene la mercancía, se crea aquí.
+    const almacen = (await post('/api/sitios',
+      { nombre: 'Almacén Central', tipo: 'almacen' })).cuerpo.id;
     const tienda = (await post('/api/sitios',
       { nombre: 'Tienda Centro', tipo: 'punto', padre_id: almacen })).cuerpo.id;
     await debe('/api/tasa', { tasa: 400 }, 'el valor del dolar');

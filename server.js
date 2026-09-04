@@ -276,23 +276,34 @@ function initDB() {
 
   anadir('productos', 'sitio_id', 'TEXT');
 
-  // Y los que ya estaban no son de nadie. Pasan al almacén principal, que es
-  // quien los ve todos de todas formas: así ninguna tienda pierde de vista lo
-  // que hoy tiene en el estante —lo sigue viendo por sus movimientos— y a partir
-  // de hoy lo que se cree nace con su local de verdad.
+  // EL ALMACÉN PRINCIPAL NO ES UN SITIO, ES EL MIRADOR (DECISIONES.md #48). Lo
+  // dijo el dueño el 4 de septiembre de 2026, después de desplegar la #45: «el
+  // almacén principal es solo para sumar lo de todos los almacenes, ahí no se
+  // asigna nada; ni en dinero ni en productos se mueve nada por él».
   //
-  // Corre UNA VEZ, con su marca en 'ajustes'. Sin ella, un producto que el dueño
-  // hubiera movido a mano a otro local volvería al almacén en cada reinicio.
-  if (!ajuste('productos_con_dueno')) {
-    const principal = db.prepare(`SELECT id FROM sitios WHERE tipo='almacen' AND activo=1
-        ORDER BY creado_en LIMIT 1`).get();
-    if (principal) {
-      const r = db.prepare('UPDATE productos SET sitio_id=? WHERE sitio_id IS NULL')
-        .run(principal.id);
-      ajuste('productos_con_dueno', new Date().toISOString());
-      console.log('[migracion] ' + r.changes + ' producto(s) pasan a ser del almacén principal');
-    }
+  // La #45 traía de la otra aplicación una migración que daba al almacén
+  // principal los productos que no tenían local. Allí eso está bien —allí ES un
+  // almacén de verdad, que surte a las tiendas—; aquí no, y esta deshace aquello:
+  // los devuelve a «todavía sin local», que es de donde él los va a repartir.
+  //
+  // Corre UNA VEZ, con su marca en 'ajustes'. Sin ella, un producto que se
+  // asignara a mano volvería a quedarse sin local en cada reinicio.
+  if (!ajuste('mirador_no_es_un_sitio')) {
+    // 'principal' a pelo y no la constante MIRADOR: se declara más abajo con
+    // 'const' y desde aquí todavía no existe, como nuevoId() y ahoraISO().
+    const r = db.prepare("UPDATE productos SET sitio_id=NULL WHERE sitio_id='principal'").run();
+    ajuste('mirador_no_es_un_sitio', new Date().toISOString());
+    console.log('[migracion] ' + r.changes + ' producto(s) vuelven a quedarse sin local: ' +
+                'el almacén principal es el mirador, no un sitio');
   }
+
+  // Y SI HAY MERCANCÍA APUNTADA EN EL MIRADOR, SE DICE. No se toca: un movimiento
+  // no se edita ni se borra (#2), y mudarlo a otro local sería inventarse a cuál.
+  // Pero callarlo sería peor: esa existencia deja de verse en el estante de nadie.
+  const enElMirador = db.prepare(
+    "SELECT COUNT(*) n FROM movimientos WHERE sitio_id='principal'").get().n;
+  if (enElMirador) console.log('[aviso] hay ' + enElMirador + ' movimiento(s) apuntados en ' +
+    'el almacén principal, que ya no es un sitio. Esa mercancía no se ve en ningún estante.');
 
   console.log('✓ Base de datos lista:', RUTA_DB);
 }
@@ -412,14 +423,16 @@ const CAMPOS_PRODUCTO = `id, codigo, codigo_barra, nombre, categoria, um, costo,
   creado_en, actualizado,
   (foto IS NOT NULL) tiene_foto`;
 
-// El almacén principal: el más viejo de los almacenes. Es el mirador del negocio
-// (#22) y el único que ve el catálogo entero (#45). Se calcula, no se guarda, para
-// que el aparato y el servidor no puedan elegir uno distinto.
-function sitioPrincipalId() {
-  const s = db.prepare(`SELECT id FROM sitios WHERE tipo='almacen' AND activo=1
-      ORDER BY creado_en LIMIT 1`).get();
-  return s ? s.id : null;
-}
+// EL MIRADOR. Es el «Almacén Principal» que la aplicación siembra al instalarse, y
+// NO es un sitio donde haya nada: es el sitio desde el que se miran los totales de
+// todos los demás (DECISIONES.md #22 y #48). Ahí no se asigna un producto, no entra
+// ni sale mercancía, no se vende y no pasa dinero.
+//
+// Se reconoce por su id y no por ser «el almacén más viejo»: con la segunda regla,
+// el día que alguien apagara ese sitio, el mirador pasaría a ser un almacén de
+// verdad y se quedaría mudo de golpe, sin que nadie entendiera por qué.
+const MIRADOR = 'principal';
+const esMirador = id => String(id || '') === MIRADOR;
 
 // Un id de local que exista y esté encendido, o null. Se comprueba SIEMPRE antes
 // de guardarlo: un id muerto en 'productos.sitio_id' dejaría el producto sin
@@ -666,6 +679,42 @@ function saldoVisible(req) {
 
 const CAMPOS_DE_SITIO = ['sitio_id', 'sitio', 'origen_id', 'destino_id',
                          'desde_sitio', 'hasta_sitio'];
+
+// EN EL MIRADOR NO SE ESCRIBE NADA (DECISIONES.md #48). El «Almacén Principal» es
+// desde donde se miran los totales de todos los locales, no un local: ahí no se
+// asigna un producto, no entra ni sale mercancía, no se vende, no se cierra un día
+// y no pasa dinero.
+//
+// Va en el SERVIDOR y no solo escondiendo opciones en la pantalla, que es
+// decoración (#10): un teléfono con el código viejo en su caché sigue ofreciendo el
+// mirador en cada desplegable, y sin esto colaría.
+//
+// Solo se miran las escrituras. Un GET con el mirador puesto es alguien MIRANDO, que
+// es justo para lo que existe. Y se miran los mismos sitios que el guardián de
+// abajo: el de arriba del cuerpo y los de dentro de las líneas —de dónde sale el
+// material y a dónde va cada unidad de una inversión—, sin pasear el cuerpo entero,
+// que tropezaría con el paquete de sincronización.
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET') return next();
+  const enCampos = fuente => {
+    for (const campo of CAMPOS_DE_SITIO) if (esMirador(fuente && fuente[campo])) return true;
+    return false;
+  };
+  let topa = enCampos(req.body);
+  for (const l of (Array.isArray(req.body && req.body.lineas) ? req.body.lineas : [])) {
+    if (!l) continue;
+    if (enCampos(l)) topa = true;
+    for (const r of (Array.isArray(l.reparto) ? l.reparto : [])) if (enCampos(r)) topa = true;
+  }
+  if (!topa) return next();
+  const nombre = (db.prepare('SELECT nombre FROM sitios WHERE id=?').get(MIRADOR) || {}).nombre
+                 || 'El almacén principal';
+  return res.status(400).json({
+    error: 'En ' + nombre + ' no se guarda nada: es donde se ven los totales de todos ' +
+           'los locales sumados. Elige el almacén o la tienda que de verdad tiene la ' +
+           'mercancía.' });
+});
+
 app.use('/api', (req, res, next) => {
   const suyos = sitiosDe(req);
   if (!suyos) return next();                      // vale en todos los locales
@@ -1471,13 +1520,17 @@ app.post('/api/productos', exige('gestionar_productos'), (req, res) => {
   //   un local         → ese, después de comprobar que existe y está encendido
   //
   // Si «vacío» se tratara como «no viene», la opción de dejarlo sin local no haría
-  // nada y el producto acabaría en el almacén principal calladamente. Y al revés,
-  // un teléfono con el app.js viejo en su caché dejaría sin local cada producto que
-  // creara sin que nadie lo hubiera pedido.
+  // nada. Y al revés, un teléfono con el app.js viejo en su caché dejaría sin local
+  // cada producto que creara sin que nadie lo hubiera pedido.
+  //
+  // Cuando no viene y quien lo crea tampoco tiene local, el producto nace SIN
+  // LOCAL, y no en el almacén principal como hacía antes: ese es el mirador y ahí
+  // no se guarda nada (#48). Sin local se ve en el apartado de Productos, que es
+  // desde donde se reparte; en el mirador no se vería en ninguna parte.
   if (b.sitio_id && !elSitio(b.sitio_id))
     return res.status(400).json({ error: 'Ese local no existe' });
   const deQuienEs = b.sitio_id === undefined
-    ? (elSitio(req.persona && req.persona.sitio_id) || sitioPrincipalId())
+    ? elSitio(req.persona && req.persona.sitio_id)
     : elSitio(b.sitio_id);
 
   db.prepare(`INSERT INTO productos
@@ -4428,8 +4481,12 @@ app.post('/api/inversiones/:id/registrar', exige('gestionar_inversiones'), (req,
   const sinFondo = faltaDinero(inv.sitio_id, inv.moneda, importeTotal);
   if (sinFondo) return res.status(400).json({ error: sinFondo });
 
-  const principal = db.prepare(`SELECT id FROM sitios WHERE tipo='almacen' AND activo=1
-      ORDER BY creado_en LIMIT 1`).get();
+  // LO QUE NO SE REPARTE SE QUEDA EN EL LOCAL DE LA CAJA QUE PAGÓ. Antes caía en el
+  // almacén principal, y desde la #48 ese es el mirador y no guarda nada: la
+  // mercancía se habría quedado sin estante y sin que nadie lo notara. El local que
+  // puso el dinero no es una elección al azar: es el único sitio de la inversión que
+  // ya está decidido y comprobado.
+  const sobrante = { id: inv.sitio_id };
   const fecha = inv.fecha, ahora = ahoraISO(), ts = Date.now();
 
   // Un día cerrado no se toca (DECISIONES.md #5). Se comprueban TODOS los
@@ -4438,10 +4495,12 @@ app.post('/api/inversiones/:id/registrar', exige('gestionar_inversiones'), (req,
   for (const l of conProducto) {
     let repartido = 0;
     for (const r of l.reparto) { destinos.add(r.sitio_id); repartido += r.cantidad; }
-    if (repartido < l.cantidad - 0.0001) destinos.add((principal || {}).id);
+    if (repartido < l.cantidad - 0.0001) destinos.add(sobrante.id);
   }
   for (const s of destinos) {
-    if (!s) return res.status(400).json({ error: 'No hay ningún almacén donde meter lo que no repartiste' });
+    if (!s) return res.status(400).json({
+      error: 'Di a qué local va cada cosa: lo que no repartas se queda en el local de ' +
+             'la caja que pone el dinero, y esta inversión no dice de qué caja sale.' });
     if (diaCerrado(s, fecha)) return res.status(409).json({
       error: 'El día ' + fecha + ' ya está cerrado en ' +
         (db.prepare('SELECT nombre FROM sitios WHERE id=?').get(s) || {}).nombre +
@@ -4463,7 +4522,7 @@ app.post('/api/inversiones/:id/registrar', exige('gestionar_inversiones'), (req,
         }
         const resto = l.cantidad - repartido;
         if (resto > 0.0001)
-          ins.run(nuevoId(), principal.id, req.persona.id, l.producto_id, resto,
+          ins.run(nuevoId(), sobrante.id, req.persona.id, l.producto_id, resto,
                   costoBase, inv.id, inv.nombre, fecha, ts, ahora);
         // El costo del producto se pone al día con esta compra, si se pidió.
         // El costo viejo no se pierde: cada movimiento guarda el suyo.

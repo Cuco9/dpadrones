@@ -72,7 +72,11 @@ const hoy = new Date().toLocaleDateString('sv-SE');
     const ses = await post('/api/auth/entrar', { usuario: 'jefe', pin: '1234' });
     cab = { Authorization: 'Bearer ' + ses.cuerpo.token };
     await post('/api/tasa', { tasa: 400 });
-    const almacen = (await pedir('/api/sitios')).cuerpo[0].id;
+    // El «Almacén Principal» que siembra la aplicación es el MIRADOR: desde ahí se
+    // ven los totales de todos sumados y no se guarda nada (DECISIONES.md #48).
+    // El almacén de verdad, el que tiene la mercancía, se crea aquí.
+    const almacen = (await post('/api/sitios',
+      { nombre: 'Almacén Central', tipo: 'almacen' })).cuerpo.id;
     const centro = (await post('/api/sitios',
       { nombre: 'Punto Centro', tipo: 'punto', padre_id: almacen })).cuerpo.id;
     const playa = (await post('/api/sitios',
@@ -349,7 +353,7 @@ const hoy = new Date().toLocaleDateString('sv-SE');
     // cero quiere empezar a vender, no a configurar.
     const quedan = (await pedir('/api/cargos')).cuerpo.personas.length;
     comp('los sitios y el personal no se tocan',
-      (await pedir('/api/sitios')).cuerpo.length === 3 && quedan === 3, quedan);
+      (await pedir('/api/sitios')).cuerpo.length === 4 && quedan === 3, quedan);
 
     console.log('\n=== Repasar los costos que quedaron mal escritos ===');
     // Se reproduce el accidente del 12 al 14 de agosto de 2026: el costo tecleado
