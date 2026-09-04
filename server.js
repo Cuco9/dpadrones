@@ -1622,6 +1622,111 @@ app.post('/api/sitios', exige('gestionar_sitios'), (req, res) => {
   res.json({ ok: true, id });
 });
 
+// QUÉ USA UN LOCAL. Hace falta para poder decirle a alguien por qué no se puede
+// quitar: «no se puede» a secas manda a buscar a ciegas por toda la aplicación.
+//
+// Se miran TODAS las tablas que lo nombran, no solo los movimientos: un local sin
+// mercancía puede tener una jornada cerrada, un apunte de dinero o a alguien
+// asignado, y borrarlo dejaría esas filas apuntando a un sitio que no existe.
+function usosDeSitio(id) {
+  const cuenta = (tabla, campo) => db.prepare(
+    `SELECT COUNT(*) n FROM ${tabla} WHERE ${campo}=?`).get(id).n;
+  const usos = [];
+  const mirar = (nombre, n) => { if (n) usos.push({ que: nombre, cuantos: n }); };
+  mirar('movimientos de mercancía', cuenta('movimientos', 'sitio_id'));
+  mirar('ventas', cuenta('ventas', 'sitio_id'));
+  mirar('cobros', cuenta('cobros', 'sitio_id'));
+  mirar('jornadas', cuenta('dias', 'sitio_id'));
+  mirar('conteos de caja', cuenta('conteos', 'sitio_id'));
+  mirar('apuntes de dinero', cuenta('fondo', 'sitio_id'));
+  mirar('inversiones', cuenta('inversiones', 'sitio_id'));
+  mirar('repartos de inversión', cuenta('inversion_reparto', 'sitio_id'));
+  mirar('traslados enviados', cuenta('traslados', 'origen_id'));
+  mirar('traslados recibidos', cuenta('traslados', 'destino_id'));
+  mirar('precios especiales', cuenta('precios_sitio', 'sitio_id'));
+  mirar('productos', db.prepare(
+    'SELECT COUNT(*) n FROM productos WHERE sitio_id=? AND borrado_en IS NULL').get(id).n);
+  mirar('personas', db.prepare(
+    'SELECT COUNT(*) n FROM personas WHERE sitio_id=? AND borrado_en IS NULL').get(id).n);
+  mirar('locales que se surten de él', db.prepare(
+    'SELECT COUNT(*) n FROM sitios WHERE padre_id=?').get(id).n);
+  return usos;
+}
+const enPalabras = usos => usos.map(u => u.cuantos + ' ' + u.que).join(', ');
+
+// CAMBIARLE EL NOMBRE O EL TIPO A UN LOCAL. Pedido por el dueño el 4 de septiembre
+// de 2026: había creado uno llamado «Almacén» y le había quedado como punto de
+// venta, y la aplicación solo dejaba CREAR. Un nombre o un tipo mal puestos se
+// quedaban para siempre, y crear otro al lado no arregla nada: deja dos.
+app.put('/api/sitios/:id', exige('gestionar_sitios'), (req, res) => {
+  const b = req.body || {};
+  const id = String(req.params.id);
+  const s = db.prepare('SELECT * FROM sitios WHERE id=?').get(id);
+  if (!s) return res.status(404).json({ error: 'Ese local no existe' });
+  const nombre = String(b.nombre || '').trim();
+  if (!nombre) return res.status(400).json({ error: 'Falta el nombre' });
+
+  // AL MIRADOR SOLO SE LE CAMBIA EL NOMBRE (#48). No es un local: no tiene tipo
+  // que elegir, no se surte de nadie y no se puede apagar, porque es la única
+  // forma de ver los totales de todos sumados.
+  if (esMirador(id)) {
+    db.prepare('UPDATE sitios SET nombre=?, actualizado=? WHERE id=?')
+      .run(nombre.slice(0, 60), ahoraISO(), id);
+    return res.json({ ok: true, solo_nombre: true });
+  }
+
+  const tipo = b.tipo === undefined ? s.tipo : b.tipo;
+  if (!['almacen', 'punto'].includes(tipo))
+    return res.status(400).json({ error: 'Tipo no válido' });
+  // Un almacén que surte a alguien no puede pasar a ser punto de venta: los que
+  // se surtían de él se quedarían colgando de un sitio que ya no reparte.
+  if (s.tipo === 'almacen' && tipo === 'punto') {
+    const hijos = db.prepare('SELECT nombre FROM sitios WHERE padre_id=?').all(id);
+    if (hijos.length) return res.status(400).json({
+      error: 'De este almacén se surte ' + hijos.map(h => h.nombre).join(' y ') +
+             '. Cámbiale antes de dónde se surte, y luego vuelve aquí.' });
+  }
+
+  let padre = b.padre_id === undefined ? s.padre_id : (b.padre_id || null);
+  if (padre) {
+    if (padre === id) return res.status(400).json({
+      error: 'Un local no se puede surtir de sí mismo.' });
+    const pa = db.prepare('SELECT tipo FROM sitios WHERE id=? AND activo=1').get(padre);
+    if (!pa || pa.tipo !== 'almacen' || esMirador(padre)) return res.status(400).json({
+      error: 'De ahí no se puede surtir: tiene que ser un almacén de verdad.' });
+  }
+  // Un almacén no se surte de otro: la cadena de dos saltos no la sabe leer nadie.
+  if (tipo === 'almacen') padre = null;
+
+  const activo = b.activo === undefined ? s.activo : (b.activo ? 1 : 0);
+  db.prepare('UPDATE sitios SET nombre=?, tipo=?, padre_id=?, activo=?, actualizado=? WHERE id=?')
+    .run(nombre.slice(0, 60), tipo, padre, activo, ahoraISO(), id);
+  res.json({ ok: true });
+});
+
+// QUITAR UN LOCAL. Solo si no lo usa nada: aquí no vale el borrado suave de los
+// productos, porque un local no aparece en el historial por su nombre sino porque
+// media docena de tablas lo apuntan, y quitarlo con algo dentro dejaría ventas y
+// jornadas colgando de un sitio que no existe.
+//
+// Cuando no se puede, se dice QUÉ lo está usando y se ofrece la salida de verdad:
+// apagarlo, que lo saca de todas las listas sin tocar lo que ya pasó.
+app.delete('/api/sitios/:id', exige('gestionar_sitios'), (req, res) => {
+  const id = String(req.params.id);
+  const s = db.prepare('SELECT * FROM sitios WHERE id=?').get(id);
+  if (!s) return res.status(404).json({ error: 'Ese local ya no está' });
+  if (esMirador(id)) return res.status(400).json({
+    error: 'Este no se puede quitar: es donde se ven los totales de todos los ' +
+           'locales sumados, y sin él no habría dónde mirarlos.' });
+  const usos = usosDeSitio(id);
+  if (usos.length) return res.status(400).json({
+    error: 'No se puede quitar «' + s.nombre + '»: tiene ' + enPalabras(usos) +
+           '. Lo que sí puedes es APAGARLO: deja de salir en todas las listas y ' +
+           'lo que ya pasó se queda como está.', usos });
+  db.prepare('DELETE FROM sitios WHERE id=?').run(id);
+  res.json({ ok: true });
+});
+
 // ─── Stock ────────────────────────────────────────────────────
 // Se calcula sumando movimientos (DECISIONES.md #1). No hay ninguna columna
 // que guarde "este sitio tiene 47": ese número es el que se pisaban dos
@@ -1637,12 +1742,12 @@ app.get('/api/stock', exige('ver_catalogo'), (req, res) => {
   res.json({ stock: mapa });
 });
 
-// Lo que hay en TODO el negocio, y repartido. El almacén principal guarda su
-// propia mercancía —lo que está físicamente en su estante— y esto es otra cosa:
-// la suma de todos los sitios, para poder contestar «¿cuánto tengo de esto,
-// esté donde esté?». Son dos preguntas distintas y las dos hacen falta: mezclar
-// las dos en un solo número dejaría al almacén sin saber qué tiene de verdad y
-// haría imposible cuadrar su día.
+// Lo que hay en TODO el negocio, y repartido. Es otra pregunta que la de arriba:
+// aquella contesta «qué hay en ESTE estante» y esta «cuánto tengo de esto, esté
+// donde esté». Las dos hacen falta, y por eso no se mezclan en un solo número: sin
+// la primera, un local no sabría qué tiene de verdad y no podría cuadrar su día.
+//
+// Esta es la que enseña el mirador, que no tiene estante propio (#48).
 app.get('/api/stock/total', exige('ver_catalogo'), (req, res) => {
   const filas = db.prepare(`SELECT m.producto_id, m.sitio_id, s.nombre sitio,
         SUM(m.cantidad) cantidad

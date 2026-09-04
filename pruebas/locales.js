@@ -471,6 +471,79 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     comp('pero mirar sí se puede, que es para lo que está',
       (await pedir('/api/stock?sitio_id=' + PRINCIPAL)).status === 200);
 
+    console.log('\n=== Un local se puede arreglar: nombre, tipo y de dónde se surte ===');
+    // Hasta el 4 de septiembre de 2026 los locales solo se podían CREAR. El dueño
+    // se había creado uno llamado «Almacén» que le quedó como punto de venta, y no
+    // había forma de arreglarlo: crear otro al lado no arregla nada, deja dos.
+    const elSitio = async id => ((await pedir('/api/sitios')).cuerpo || []).find(s => s.id === id) || {};
+    const arreglar = (id, cuerpo) => pedir('/api/sitios/' + id,
+      { method: 'PUT', body: JSON.stringify(cuerpo) });
+
+    const malPuesto = (await debe('/api/sitios', { nombre: 'Almacen', tipo: 'punto' },
+      'el local malPuesto puesto')).id;
+    comp('nace como punto de venta, que es lo que se eligió',
+      (await elSitio(malPuesto)).tipo === 'punto');
+    const r1 = await arreglar(malPuesto, { nombre: 'Almacén del fondo', tipo: 'almacen' });
+    comp('se le cambia el nombre y el tipo de una vez', r1.status === 200 &&
+      (await elSitio(malPuesto)).nombre === 'Almacén del fondo' &&
+      (await elSitio(malPuesto)).tipo === 'almacen', JSON.stringify(await elSitio(malPuesto)));
+
+    // Un almacén no se surte de otro: la cadena de dos saltos no la sabe leer nadie.
+    await arreglar(TIENDA, { nombre: 'Tienda', tipo: 'punto', padre_id: malPuesto });
+    comp('una tienda sí se surte de un almacén',
+      (await elSitio(TIENDA)).padre_id === malPuesto, (await elSitio(TIENDA)).padre_id);
+    // Y ahora ese almacén ya no puede volver a ser punto de venta: la tienda se
+    // quedaría colgando de un sitio que no reparte.
+    const volver = await arreglar(malPuesto, { nombre: 'Almacén del fondo', tipo: 'punto' });
+    comp('un almacén que surte a alguien no puede pasar a punto de venta',
+      volver.status === 400, volver.status + ' ' + JSON.stringify(volver.cuerpo));
+    comp('y se dice a quién surte, para poder arreglarlo',
+      /Tienda/.test(volver.cuerpo.error || ''), volver.cuerpo.error);
+    comp('no se puede surtir de sí mismo',
+      (await arreglar(TIENDA, { nombre: 'Tienda', tipo: 'punto', padre_id: TIENDA })).status === 400);
+    comp('ni del mirador, que no reparte nada',
+      (await arreglar(TIENDA, { nombre: 'Tienda', tipo: 'punto', padre_id: PRINCIPAL })).status === 400);
+    // Se le quita el padre para poder seguir.
+    await arreglar(TIENDA, { nombre: 'Tienda', tipo: 'punto', padre_id: '' });
+
+    console.log('\n=== Al mirador solo se le cambia el nombre ===');
+    const r2 = await arreglar(PRINCIPAL, { nombre: 'Resumen general', tipo: 'punto' });
+    comp('se le puede cambiar el nombre', r2.status === 200 &&
+      (await elSitio(PRINCIPAL)).nombre === 'Resumen general',
+      (await elSitio(PRINCIPAL)).nombre);
+    comp('pero no lo que es: sigue siendo el mirador',
+      (await elSitio(PRINCIPAL)).tipo === 'almacen', (await elSitio(PRINCIPAL)).tipo);
+    comp('y no se puede quitar, que sin él no hay dónde ver los totales',
+      (await pedir('/api/sitios/' + PRINCIPAL, { method: 'DELETE' })).status === 400);
+
+    console.log('\n=== Quitar un local: solo si no tiene nada dentro ===');
+    const conHistoria = await pedir('/api/sitios/' + TIENDA, { method: 'DELETE' });
+    comp('uno con ventas y mercancía no se puede quitar', conHistoria.status === 400,
+      conHistoria.status);
+    comp('y se dice QUÉ lo está usando, en vez de un «no se puede» a secas',
+      /movimientos de mercancía/.test(conHistoria.cuerpo.error || ''),
+      conHistoria.cuerpo.error);
+    comp('y se ofrece la salida de verdad: apagarlo',
+      /APAGARLO/.test(conHistoria.cuerpo.error || ''));
+    // Apagarlo lo saca de la aplicación sin tocar lo que ya pasó.
+    await arreglar(TIENDA, { nombre: 'Tienda', tipo: 'punto', activo: false });
+    const enLaApp = (await pedir('/api/productos')).cuerpo.sitios || [];
+    comp('apagado, deja de salir en la aplicación',
+      !enLaApp.some(s => s.id === TIENDA), JSON.stringify(enLaApp.map(s => s.nombre)));
+    comp('pero sus ventas siguen ahí, que es de lo que se trata',
+      (await pedir('/api/dia?sitio_id=' + TIENDA + '&fecha=' +
+        new Date().toLocaleDateString('sv-SE'))).status === 200);
+    await arreglar(TIENDA, { nombre: 'Tienda', tipo: 'punto', activo: true });
+
+    // Y uno que no se ha usado se quita del todo.
+    const dePrueba = (await debe('/api/sitios', { nombre: 'Me equivoqué', tipo: 'punto' },
+      'el local de prueba')).id;
+    comp('uno recién creado y sin usar sí se quita',
+      (await pedir('/api/sitios/' + dePrueba, { method: 'DELETE' })).status === 200);
+    comp('y ya no está', !(await elSitio(dePrueba)).id);
+    comp('quitarlo dos veces no cuela',
+      (await pedir('/api/sitios/' + dePrueba, { method: 'DELETE' })).status === 404);
+
     console.log('\n=== La migración devuelve a su sitio lo que el mirador se quedó ===');
     // La #45 traía de la otra aplicación una migración que daba al mirador los
     // productos sin local. Allí está bien —allí ES un almacén de verdad—; aquí no,

@@ -5717,31 +5717,83 @@ function mostrarResultadoSync(t1, c1, t2, c2) {
 }
 
 // ─── Sitios ───────────────────────────────────────────────────
-function abrirSitio() {
-  $('s-nombre').value = '';
-  $('s-tipo').value = 'punto';
+// La ficha de un local. Se abre vacía para crear uno, o con su id para
+// arreglarlo: hasta el 4-sep-2026 solo se podía CREAR, y un nombre o un tipo mal
+// puestos se quedaban para siempre. Crear otro al lado no arregla nada: deja dos.
+let sitioEditando = null;
+
+function abrirSitio(id) {
+  sitioEditando = id || null;
+  const s = id ? SITIOS.find(x => x.id === id) : null;
+  const mirador = !!(s && esMirador(s.id));
+
+  $('s-titulo').textContent = s ? 'Editar local' : 'Nuevo local';
+  $('s-nombre').value = s ? s.nombre : '';
+  // Al mirador solo se le cambia el nombre: no es un local (#48).
+  $('s-solo-mirador').style.display = mirador ? 'block' : 'none';
+  $('s-campos').style.display = mirador ? 'none' : 'block';
+  $('s-borrar').style.display = (s && !mirador) ? 'block' : 'none';
+
+  $('s-tipo').value = s ? s.tipo : 'punto';
+  // Los almacenes que puede tener por encima: todos menos él mismo, que no se
+  // surte de sí mismo.
+  const almacenes = sitiosReales().filter(x => x.tipo === 'almacen' && x.id !== id);
   $('s-padre').innerHTML = '<option value="">Independiente</option>' +
-    sitiosReales().filter(s => s.tipo === 'almacen')
-      .map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
-  const almacenes = sitiosReales().filter(s => s.tipo === 'almacen');
-  if (almacenes.length) $('s-padre').value = almacenes[0].id;
+    almacenes.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join('');
+  $('s-padre').value = s ? (s.padre_id || '') : (almacenes.length ? almacenes[0].id : '');
+  $('s-activo-caja').style.display = s ? 'block' : 'none';
+  $('s-activo').checked = s ? s.activo !== 0 : true;
+  alCambiarTipoDeSitio();
+
   $('velo-sitio').classList.add('abierto');
   setTimeout(() => $('s-nombre').focus(), 120);
 }
-function cerrarSitio() { $('velo-sitio').classList.remove('abierto'); }
+function cerrarSitio() { $('velo-sitio').classList.remove('abierto'); sitioEditando = null; }
+
+// Un almacén no se surte de otro: la cadena de dos saltos no la sabe leer nadie,
+// y el servidor la borra igual. Se esconde en vez de dejar elegir algo que no va
+// a guardarse.
+function alCambiarTipoDeSitio() {
+  $('s-padre-caja').style.display = $('s-tipo').value === 'almacen' ? 'none' : 'block';
+}
 
 async function guardarSitio() {
   const nombre = $('s-nombre').value.trim();
   if (!nombre) { toast('⚠ Ponle nombre'); return; }
+  const cuerpo = { nombre, tipo: $('s-tipo').value,
+                   padre_id: $('s-tipo').value === 'almacen' ? null : ($('s-padre').value || null) };
   try {
-    await api('/api/sitios', { method: 'POST', body: JSON.stringify({
-      nombre, tipo: $('s-tipo').value, padre_id: $('s-padre').value || null }) });
+    if (sitioEditando) {
+      cuerpo.activo = $('s-activo').checked;
+      await api('/api/sitios/' + sitioEditando, { method: 'PUT', body: JSON.stringify(cuerpo) });
+    } else {
+      await api('/api/sitios', { method: 'POST', body: JSON.stringify(cuerpo) });
+    }
+    const editaba = sitioEditando;
     cerrarSitio();
     await cargarCatalogo();
     pintarSelectorSitio();
     cargarEstado();
-    toast('✓ Creado');
-  } catch (e) { alert('No se pudo crear: ' + e.message); }
+    toast(editaba ? '✓ Guardado' : '✓ Creado');
+  } catch (e) { alert('No se pudo guardar: ' + e.message); }
+}
+
+// Quitar un local. El servidor se niega si algo lo usa y dice QUÉ: sin ese aviso
+// habría que ir a mirar seis pantallas para adivinar por qué no deja.
+async function eliminarSitio() {
+  const s = SITIOS.find(x => x.id === sitioEditando);
+  if (!s) return;
+  if (!confirm('¿Quitar el local «' + s.nombre + '»?\n\n' +
+      'Solo se puede si no tiene nada dentro: ni ventas, ni mercancía, ni dinero. ' +
+      'Si tiene algo, se te dirá qué y podrás apagarlo en vez de quitarlo.')) return;
+  try {
+    await api('/api/sitios/' + s.id, { method: 'DELETE' });
+    cerrarSitio();
+    await cargarCatalogo();
+    pintarSelectorSitio();
+    cargarEstado();
+    toast('✓ Local quitado');
+  } catch (e) { alert('No se pudo quitar: ' + e.message); }
 }
 
 // Lo que se escribió en la casilla del costo, pasado a LA MONEDA DEL NEGOCIO.
@@ -5911,13 +5963,18 @@ async function cargarEstado() {
 
   // El mirador se dice tal cual, para que se entienda por qué no sale en los
   // desplegables de «dónde pasa esto» (#48).
-  $('lista-sitios').innerHTML = SITIOS.map(s => `<div class="fila">
-    <span>${esc(s.nombre)}${esMirador(s.id)
+  // Cada fila se toca para arreglarla: el nombre, el tipo, de dónde se surte y
+  // si se puede usar. El mirador se dice tal cual, para que se entienda por qué no
+  // sale en los desplegables de «dónde pasa esto» (#48).
+  $('lista-sitios').innerHTML = SITIOS.map(s => `<div class="fila" style="cursor:pointer"
+      onclick="abrirSitio('${s.id}')">
+    <span>${esc(s.nombre)}${s.activo === 0 ? ' <span style="color:var(--rojo);font-size:11px">(apagado)</span>' : ''}${
+      esMirador(s.id)
       ? '<br><span class="pista" style="margin:0">Solo para ver los totales de todos ' +
         'sumados. Aquí no se guarda ni se vende nada.</span>' : ''}</span>
     <b style="font-size:12px;color:var(--texto3)">${esMirador(s.id) ? 'Los totales'
       : s.tipo === 'almacen' ? 'Almacén' : 'Punto de venta'}</b>
-  </div>`).join('') || '<div class="vacio">Sin sitios</div>';
+  </div>`).join('') || '<div class="vacio">Sin locales</div>';
 
   // La tarjeta del sello solo si esta copia lo tiene. Una copia detrás de
   // nginx va con certificado de verdad: ahí no hay nada que instalar, y el

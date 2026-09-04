@@ -582,8 +582,10 @@
       <h2>El negocio</h2></div>
 
     <div class="tarjeta">
-      <h2>Sitios</h2>
+      <h2>Almacenes y puntos de venta</h2>
       <div id="lista-sitios"></div>
+      <div class="pista">Toca cualquiera para cambiarle el nombre, lo que es o de qué
+        almacén se surte.</div>
       <button class="btn ancho" style="margin-top:11px" data-permiso="gestionar_sitios" onclick="abrirSitio()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>
         Nuevo almacén o punto
@@ -1967,21 +1969,42 @@
     <button class="cerrar" onclick="cerrarSitio()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
-    <h3>Nuevo sitio</h3>
+    <h3 id="s-titulo">Nuevo local</h3>
     <label class="lbl">Nombre *</label>
     <input type="text" id="s-nombre" placeholder="Ej: Punto Vedado">
-    <label class="lbl">Qué es</label>
-    <select id="s-tipo">
-      <option value="punto">Punto de venta</option>
-      <option value="almacen">Almacén</option>
-    </select>
-    <label class="lbl">Se surte de</label>
-    <select id="s-padre"></select>
-    <div class="pista">Si eliges «Independiente», ese sitio lleva su propio inventario
-      sin depender de ningún almacén.</div>
-    <div class="btnFila">
-      <button class="btn primario ancho" onclick="guardarSitio()">Crear</button>
+    <!-- El mirador no tiene nada de esto que elegir: no es un local. Solo se le
+         puede cambiar el nombre (DECISIONES.md #48). -->
+    <div id="s-solo-mirador" class="pista" style="display:none">Este no es un local:
+      es donde se ven <b>los totales de todos</b> sumados. Solo se le puede cambiar
+      el nombre.</div>
+    <div id="s-campos">
+      <label class="lbl">Qué es</label>
+      <select id="s-tipo" onchange="alCambiarTipoDeSitio()">
+        <option value="punto">Punto de venta</option>
+        <option value="almacen">Almacén</option>
+      </select>
+      <div id="s-padre-caja">
+        <label class="lbl">Se surte de</label>
+        <select id="s-padre"></select>
+        <div class="pista">Si eliges «Independiente», ese local lleva su propio inventario
+          sin depender de ningún almacén.</div>
+      </div>
+      <!-- Apagar un local es la salida cuando ya no se puede quitar porque tiene
+           historial: deja de salir en todas las listas y lo que pasó se queda. -->
+      <div id="s-activo-caja" style="display:none;margin-top:12px">
+        <label style="display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer">
+          <input type="checkbox" id="s-activo" checked style="width:auto;margin:0">
+          Se puede usar
+        </label>
+        <div class="pista">Quitando la marca, este local deja de salir en las listas.
+          Sus ventas y su inventario se quedan como están.</div>
+      </div>
     </div>
+    <div class="btnFila">
+      <button class="btn primario ancho" onclick="guardarSitio()">Guardar</button>
+    </div>
+    <button class="btn peligro ancho" id="s-borrar" style="display:none;margin-top:8px"
+      onclick="eliminarSitio()">Quitar este local</button>
   </div>
 </div>
 

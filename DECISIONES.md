@@ -2019,7 +2019,7 @@ las copias, que es por donde entró la primera vez.
 
 ---
 
-## 47. Tres cosas que la aplicación no dejaba hacer, y los avisos con su nombre
+## 47. Cuatro cosas que la aplicación no dejaba hacer, y los avisos con su nombre
 
 Pedidas por el dueño el **4 de septiembre de 2026**, seguidas, mientras estrenaba
 la aplicación por dentro.
@@ -2077,6 +2077,44 @@ El texto de cuando están bloqueados hablaba del **candado de la barra de
 direcciones**, que en una aplicación instalada en el teléfono no existe. Ahora
 manda a los ajustes de notificaciones del teléfono, que es donde se arregla de
 verdad.
+
+### Y un local se puede arreglar, no solo crear
+
+Añadido el **4 de septiembre de 2026**, al ver su instalación de verdad: tenía un
+local llamado «Almacén» que le había quedado como **punto de venta**, y la
+aplicación solo dejaba **crear**. Un nombre o un tipo mal puestos se quedaban para
+siempre, y crear otro al lado no arregla nada: deja dos.
+
+Ahora se toca cualquiera de la lista de Ajustes → El negocio y se le cambia el
+**nombre**, **lo que es** y **de qué almacén se surte**.
+
+**Tres frenos, y los tres por la misma razón** —que un cambio no deje colgando algo
+que ya existe—:
+
+- Un **almacén que surte a alguien** no puede pasar a punto de venta: quien se
+  surtía de él se quedaría colgando de un sitio que ya no reparte. Se dice a quién
+  surte, para poder arreglarlo primero.
+- Un local **no se surte de sí mismo**, ni del **mirador**, que no reparte nada.
+- Un **almacén no se surte de otro almacén**: la cadena de dos saltos no la sabe
+  leer nadie, así que ese desplegable ni se enseña cuando se elige «Almacén».
+
+**Al mirador solo se le cambia el nombre** (#48). No tiene tipo que elegir, no se
+surte de nadie, no se puede apagar y no se puede quitar: sin él no habría dónde ver
+los totales.
+
+**Quitar un local solo se puede si no lo usa nada.** Aquí no vale el borrado suave
+de los productos: un local no aparece en el historial por su nombre, sino porque
+media docena de tablas lo apuntan, y quitarlo con algo dentro dejaría ventas y
+jornadas colgando de un sitio que no existe. Se miran las catorce cosas que pueden
+nombrarlo —movimientos, ventas, cobros, jornadas, conteos, dinero, inversiones,
+repartos, traslados de ida y de vuelta, precios especiales, productos, personas y
+los locales que se surten de él—.
+
+**Y cuando no se puede, se dice QUÉ lo está usando y se ofrece la salida de
+verdad: apagarlo.** Un local apagado deja de salir en todas las listas y lo que ya
+pasó se queda como está. «No se puede» a secas manda a buscar a ciegas por seis
+pantallas.
+
 
 ### Y «la gente» pasa a ser «el personal»
 
