@@ -133,8 +133,10 @@ function fichaDeProducto(productos, sitios, local, permisos) {
   const js = fs.readFileSync(path.join(raiz, 'public/app.js'), 'utf8');
   const desde = js.indexOf('function abrirFicha(id, copiar)');
   if (desde < 0) throw new Error('no se encontró abrirFicha(id, copiar) en public/app.js');
-  const fin = js.indexOf('function alCambiarLocalDeLaFicha');
-  if (fin < 0) throw new Error('no se encontró alCambiarLocalDeLaFicha en public/app.js');
+  // Hasta la ÚLTIMA de las funciones de la ficha: desde el 4-sep la cantidad se
+  // puede escribir en sacos, y esa cuenta vive en alPonerStockInicial().
+  const fin = js.indexOf('function alPonerStockInicial');
+  if (fin < 0) throw new Error('no se encontró alPonerStockInicial en public/app.js');
   // Hasta la llave que cierra esa última función. Se busca «salto de línea + }» y
   // no «\n}\n»: el archivo lleva finales de línea de Windows, y con el remate de
   // tres letras el recorte salía vacío y la prueba se rompía diciendo que no
@@ -142,8 +144,12 @@ function fichaDeProducto(productos, sitios, local, permisos) {
   const hasta = js.indexOf('\n}', fin) + 2;
 
   const campos = {};
+  // 'value' e 'innerHTML' nacen VACÍOS, no sin existir: la ficha lee
+  // $('f-um').value.trim() y con undefined la prueba se rompía en vez de comprobar
+  // nada, que es la peor forma de fallar.
   const $ = id => (campos[id] = campos[id] ||
-    { style: {}, classList: { add() {}, remove() {} }, focus() {}, select() {} });
+    { value: '', innerHTML: '', style: {}, classList: { add() {}, remove() {} },
+      focus() {}, select() {} });
   const nada = () => {};
   const puedo = (...cuales) => cuales.every(c => (permisos || ['*']).includes('*') ||
     (permisos || []).includes(c));
@@ -153,15 +159,17 @@ function fichaDeProducto(productos, sitios, local, permisos) {
   const hazlo = new Function('$', 'PRODUCTOS', 'SITIOS', 'puedo', 'esc', 'sitioActual',
     'MONEDA_BASE', 'pintarFoto', 'ponerListasDelProducto', 'equivalenciaCosto',
     'equivalencia', 'alCambiarComision', 'setTimeout', 'sitiosReales', 'enElMirador',
-    'esMirador',
-    'let editando = null, FICHA_PRODUCTO = null, fotoActual, fichaNaciendo = false;\n' +
+    'esMirador', 'enPlural',
+    'let editando = null, FICHA_PRODUCTO = null, fotoActual, fichaPuedeEstrenar = false;\n' +
     js.slice(desde, hasta) +
-    '\nreturn { abrirFicha, alCambiarLocalDeLaFicha, localDeLaFicha,' +
-    ' estado: () => ({ editando, FICHA_PRODUCTO, fotoActual, fichaNaciendo }) };');
+    '\nreturn { abrirFicha, alCambiarLocalDeLaFicha, localDeLaFicha, medidaDelStock,' +
+    ' ponerMedidaDelStock, estado: () => ({ editando, FICHA_PRODUCTO, fotoActual,' +
+    ' fichaPuedeEstrenar }) };');
   const esMirador = id => id === 'principal';
   const api = hazlo($, productos, sitios, puedo, x => String(x == null ? '' : x),
     () => local, 'CUP', nada, nada, nada, nada, nada, nada,
-    () => sitios.filter(x => !esMirador(x.id)), () => esMirador(local), esMirador);
+    () => sitios.filter(x => !esMirador(x.id)), () => esMirador(local), esMirador,
+    x => String(x) + 's');
   return Object.assign({}, api, { campos });
 }
 
@@ -336,6 +344,50 @@ function fichaDeProducto(productos, sitios, local, permisos) {
     comp('sin permiso de mover mercancía no se pregunta la existencia',
       soloCatalogo.campos['f-existencia-caja'].style.display === 'none');
 
+    // EL STOCK INICIAL SE PUEDE ESCRIBIR EN SACOS (#44). Antes «10» aquí eran diez
+    // unidades sueltas aunque el producto viniera en sacos de cien, y en una entrada
+    // del almacén ese mismo «10» eran diez sacos. Dos sitios, la misma cifra, dos
+    // significados: eso no es una preferencia, es un fallo.
+    const conBulto = fichaDeProducto(await catalogo(), (await pedir('/api/sitios')).cuerpo, TIENDA);
+    conBulto.abrirFicha();
+    conBulto.campos['f-porcaja'].value = '100';
+    conBulto.campos['f-nombrecaja'].value = 'Saco';
+    conBulto.campos['f-um'].value = 'Libra';
+    conBulto.ponerMedidaDelStock();
+    comp('con bulto puesto, se puede elegir en qué se escribe la cantidad',
+      conBulto.campos['f-existencia-medida'].style.display === '' &&
+      /Saco \(de 100\)/.test(conBulto.campos['f-existencia-medida'].innerHTML || ''),
+      conBulto.campos['f-existencia-medida'].innerHTML);
+    comp('y viene puesto en unidades, que es lo de siempre',
+      conBulto.medidaDelStock() === 'unidad', conBulto.medidaDelStock());
+    conBulto.campos['f-existencia-medida'].value = 'caja';
+    comp('al elegir sacos, eso es lo que se manda al servidor',
+      conBulto.medidaDelStock() === 'caja');
+    // Y sin bulto no se ofrece: sería ofrecer una forma de equivocarse.
+    conBulto.campos['f-porcaja'].value = '';
+    conBulto.ponerMedidaDelStock();
+    comp('sin bulto no se ofrece ninguna medida',
+      conBulto.campos['f-existencia-medida'].style.display === 'none' &&
+      conBulto.medidaDelStock() === 'unidad');
+
+    // Y LA PREGUNTA VUELVE AL ASIGNARLE EL LOCAL a uno que nunca ha tenido nada.
+    // Pasó de verdad: creando desde el mirador la casilla no sale —ahí no hay dónde
+    // meter nada— y al ponerle el local después ya no volvía.
+    const sinEstrenar = fichaDeProducto(await catalogo(), (await pedir('/api/sitios')).cuerpo, TIENDA);
+    sinEstrenar.abrirFicha(cerveza);
+    comp('editando uno que nunca ha tenido mercancía, se puede apuntar la que hay',
+      sinEstrenar.campos['f-existencia-caja'].style.display === 'block',
+      sinEstrenar.campos['f-existencia-caja'].style.display);
+    comp('y se le dice que es porque todavía no ha tenido ninguna',
+      /todavía no ha tenido mercancía/.test(sinEstrenar.campos['f-existencia-pista'].innerHTML || ''),
+      sinEstrenar.campos['f-existencia-pista'].innerHTML);
+    // Pero en cuanto tenga un movimiento suyo, nunca más: sería pisar el historial.
+    const yaEstrenado = fichaDeProducto(await catalogo(), (await pedir('/api/sitios')).cuerpo, TIENDA);
+    yaEstrenado.abrirFicha(conStock);
+    comp('pero en uno que ya ha tenido mercancía, no se pregunta nunca más',
+      yaEstrenado.campos['f-existencia-caja'].style.display === 'none',
+      yaEstrenado.campos['f-existencia-caja'].style.display);
+
     console.log('\n=== Duplicar crea OTRO producto, no cambia este ===');
     const ficha = fichaDeProducto(await catalogo(), (await pedir('/api/sitios')).cuerpo, TIENDA);
     ficha.abrirFicha(refresco, true);
@@ -363,8 +415,12 @@ function fichaDeProducto(productos, sitios, local, permisos) {
       ficha.campos['f-nombre'].value === 'Refresco de cola', ficha.campos['f-nombre'].value);
     comp('y con el código del fabricante que tuviera',
       ficha.campos['f-codbarra'].value === ((await de(refresco)).codigo_barra || ''));
-    comp('editando no se pregunta la existencia: sería pisar el historial',
-      ficha.campos['f-existencia-caja'].style.display === 'none');
+    // Este refresco todavía no ha tenido mercancía —los movimientos vienen más
+    // abajo—, así que la pregunta SIGUE estando: es el mismo estreno, más tarde.
+    // Que deja de estar en cuanto tenga un movimiento suyo se comprueba aparte.
+    comp('editando uno sin estrenar, la pregunta sigue estando',
+      ficha.campos['f-existencia-caja'].style.display === 'block',
+      ficha.campos['f-existencia-caja'].style.display);
 
     console.log('\n=== En qué locales se ha visto cada producto ===');
     comp('recién creado, en ninguno: nadie ha tenido mercancía suya',

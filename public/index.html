@@ -1169,7 +1169,16 @@
          a mano sería pisar el historial en vez de apuntar lo que pasó (#2). -->
     <div id="f-existencia-caja" style="display:none">
       <label class="lbl">Stock</label>
-      <input type="number" id="f-existencia" placeholder="0" inputmode="decimal">
+      <input type="number" id="f-existencia" placeholder="0" inputmode="decimal"
+             oninput="alPonerStockInicial()">
+      <!-- SE PUEDE ESCRIBIR EN SACOS O EN CAJAS, igual que en una entrada del
+           almacén (#44). Sin esto, «10» en una entrada y «10» aquí querían decir
+           cosas distintas: allí diez sacos, aquí diez libras sueltas. Solo sale si
+           el producto viene en bultos; para los demás, ofrecer «cajas» sería
+           ofrecer una forma de equivocarse. -->
+      <select id="f-existencia-medida" style="display:none;margin-top:6px"
+              onchange="alPonerStockInicial()"></select>
+      <div class="pista" id="f-existencia-cuenta"></div>
       <div class="pista" id="f-existencia-pista"></div>
     </div>
 

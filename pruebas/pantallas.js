@@ -759,23 +759,41 @@ console.log('\n=== La existencia con la que nace un producto ===');
 comp('la ficha tiene la casilla, y su explicación',
   /id="f-existencia-caja"/.test(html) && /id="f-existencia"/.test(html) &&
   /id="f-existencia-pista"/.test(html));
-comp('solo se pregunta al crear, no al editar',
-  /const puedeExistencia = fichaNaciendo && puedo\('gestionar_inventario'\)/.test(js) &&
+comp('solo se pregunta mientras el producto no haya tenido mercancía',
+  /const puedeExistencia = fichaPuedeEstrenar && puedo\('gestionar_inventario'\)/.test(js) &&
   /\$\('f-existencia-caja'\)\.style\.display = puedeExistencia \? 'block' : 'none'/.test(js));
+// SE PUEDE APUNTAR DESPUÉS, y no solo al crear: creando desde el almacén principal
+// la casilla no sale —ahí no hay dónde meter nada (#48)— y al asignarle el local
+// después no volvía, así que no quedaba forma de decir cuánto hay. En cuanto tenga
+// un movimiento suyo desaparece para siempre: sería pisar el historial (#2).
+comp('y vuelve al asignarle el local a uno que nunca ha tenido nada',
+  /fichaPuedeEstrenar = naciendo \|\| !!\(p && !\(p\.sitios \|\| \[\]\)\.length\)/.test(js));
 // Quien solo lleva el catálogo no puede mover mercancía: si viera la casilla,
 // crearía el producto y el servidor le rechazaría la entrada después.
 comp('y solo a quien puede mover mercancía',
-  /puedeExistencia = fichaNaciendo && puedo\('gestionar_inventario'\)/.test(js));
+  /puedeExistencia = fichaPuedeEstrenar && puedo\('gestionar_inventario'\)/.test(js));
 // Y SOLO SI EL PRODUCTO TIENE LOCAL (#45): la mercancía tiene que estar en algún
 // sitio, y uno que se deja «todavía sin local» no tiene dónde meterla.
 comp('y solo si el producto tiene local, porque si no no hay dónde meterla',
-  /puedeExistencia = fichaNaciendo && puedo\('gestionar_inventario'\) && !!donde/.test(js));
+  /puedeExistencia = fichaPuedeEstrenar && puedo\('gestionar_inventario'\) && !!donde/.test(js));
 // La entrada va al local DEL PRODUCTO, no al que se esté mirando: desde el almacén
 // principal se crean cosas que son de una tienda, y meterlas en el almacén las
 // dejaría contadas donde no están.
 comp('se apunta como ENTRADA de verdad, en el local del producto',
-  /api\('\/api\/movimientos'[\s\S]{0,200}tipo: 'compra'[\s\S]{0,120}sitio_id: sitioId/.test(js) &&
-  /apuntarExistenciaInicial\(r\.id, cuerpo\.costo, existencia,\s*localDeLaFicha\(\)\)/.test(js));
+  /api\('\/api\/movimientos'[\s\S]{0,200}tipo: 'compra'[\s\S]{0,160}sitio_id: sitioId/.test(js) &&
+  /apuntarExistenciaInicial\(r\.id, cuerpo\.costo, existencia,\s*localDeLaFicha\(\), medidaDelStock\(\)\)/.test(js));
+// SE PUEDE ESCRIBIR EN SACOS O EN CAJAS, como en una entrada del almacén (#44).
+// Sin esto, «10» en una entrada y «10» aquí querían decir cosas distintas: allí
+// diez sacos, aquí diez libras sueltas. La cuenta la hace el SERVIDOR.
+comp('la cantidad se puede escribir en sacos o cajas, no solo en unidades',
+  /id="f-existencia-medida"/.test(html) &&
+  /function ponerMedidaDelStock\(\)/.test(js) &&
+  /medida: medida \|\| 'unidad'/.test(js));
+comp('la lista de medidas se rehace al tocar el bulto, que se edita en la misma ficha',
+  /ponerMedidaDelStock\(\);\s*\n\s*const enBultos = /.test(js));
+comp('y se dice en voz alta lo que se va a guardar antes de guardarlo',
+  /function alPonerStockInicial\(\)/.test(js) &&
+  /id="f-existencia-cuenta"/.test(html));
 // El cuerpo que viaja a /api/productos es el que no puede llevarla: guardarla
 // ahí sería el campo «este punto tiene 47 unidades» que la #1 prohíbe.
 comp('NO viaja dentro del producto: el stock se sigue calculando',

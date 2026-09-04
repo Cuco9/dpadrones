@@ -13,10 +13,14 @@ let editando = null;      // id del producto abierto en la ficha, o null si es n
 // producto le borraría la foto, porque el catálogo ya no la trae para devolverla.
 let fotoActual = null;
 let FICHA_PRODUCTO = null;   // el producto que se está editando, para su foto
-// Si la ficha abierta va a CREAR un producto —uno en blanco o una copia—. No es lo
-// mismo que «editando === null» a la hora de leerlo desde el desplegable del local,
-// que se toca con la ficha ya abierta.
-let fichaNaciendo = false;
+// Si el producto de la ficha PUEDE ESTRENARSE, o sea si todavía se le puede
+// apuntar la existencia con la que empieza. Es cierto al crear uno —en blanco o
+// copiado— y también al arreglar uno que nunca ha tenido mercancía en ningún
+// local: es el mismo momento, solo que más tarde.
+//
+// No es lo mismo que «editando === null», y hace falta guardarlo aparte porque se
+// lee al tocar el desplegable del local, con la ficha ya abierta.
+let fichaPuedeEstrenar = false;
 
 let YO = null;            // { persona, cargo, permisos }
 let PERMISOS_POSIBLES = [];
@@ -345,6 +349,10 @@ function pistaDelBulto() {
     'Y trae dentro (' + enPlural(um) + ')';
   // «Cada caja» y no «un caja» / «una caja»: así no hay que acertar el género de
   // una palabra que escribe el dueño y que puede ser cualquiera.
+  // El bulto acaba de cambiar, así que la medida en la que se escribe el stock
+  // inicial ya no es la misma: se rehace aquí, que es por donde pasan todos los
+  // caminos que lo tocan.
+  ponerMedidaDelStock();
   const enBultos = $('f-caja-sel') && !!$('f-caja-sel').value;
   caja.innerHTML = !enBultos
     ? 'Se cuenta y se transfiere en <b>' + esc(enPlural(um)) + '</b>.'
@@ -672,7 +680,15 @@ function abrirFicha(id, copiar) {
   // mercancía: apuntarla es registrar una entrada, y eso tiene su propio permiso.
   // Quien solo lleva el catálogo no ve la casilla, porque el servidor le
   // rechazaría la entrada cuando el producto ya estuviera creado.
-  fichaNaciendo = naciendo;
+  // LA EXISTENCIA TAMBIÉN SE PUEDE APUNTAR DESPUÉS, si el producto todavía no ha
+  // tenido mercancía en ningún local. Pasó de verdad: creando un producto desde el
+  // almacén principal, la casilla no sale —ahí no hay dónde meter nada (#48)—, y al
+  // asignarle el local después ya no volvía, así que no quedaba forma de decir
+  // cuánto hay salvo ir a «Entrada».
+  //
+  // En cuanto tenga un solo movimiento suyo, la casilla desaparece para siempre:
+  // escribir ahí un número sería pisar el historial (#2).
+  fichaPuedeEstrenar = naciendo || !!(p && !(p.sitios || []).length);
   $('f-existencia').value = '';
   alCambiarLocalDeLaFicha();
   $('f-comision').value = p && p.comision > 0 ? p.comision : '';
@@ -720,12 +736,59 @@ function localDeLaFicha() {
 // producto acabaría viéndose allí de todas formas, por sus movimientos.
 function alCambiarLocalDeLaFicha() {
   const donde = localDeLaFicha();
-  const puedeExistencia = fichaNaciendo && puedo('gestionar_inventario') && !!donde;
+  const puedeExistencia = fichaPuedeEstrenar && puedo('gestionar_inventario') && !!donde;
   $('f-existencia-caja').style.display = puedeExistencia ? 'block' : 'none';
   if (!puedeExistencia) return;
   const nombre = (SITIOS.find(s => s.id === donde) || {}).nombre || 'este sitio';
-  $('f-existencia-pista').innerHTML = 'Se apunta como entrada de mercancía en <b>' +
-    esc(nombre) + '</b>, al costo de arriba. Déjalo vacío si todavía no ha llegado.';
+  $('f-existencia-pista').innerHTML =
+    (editando ? 'Este producto todavía no ha tenido mercancía en ningún local. ' : '') +
+    'Se apunta como entrada de mercancía en <b>' + esc(nombre) +
+    '</b>, al costo de arriba. Déjalo vacío si todavía no ha llegado.';
+  ponerMedidaDelStock();
+}
+
+// EN QUÉ SE ESCRIBE ESA CANTIDAD: en unidades o en bultos (#44). La lista se rehace
+// cada vez, y no solo al abrir la ficha, porque el bulto se está editando en esta
+// MISMA pantalla: elegir «saco de 100» y escribir 10 tiene que poder querer decir
+// diez sacos, no diez libras sueltas.
+//
+// La multiplicación la hace el SERVIDOR, como en las entradas del almacén: aquí
+// solo se enseña para poder verla antes de guardar.
+function ponerMedidaDelStock() {
+  const sel = $('f-existencia-medida');
+  if (!sel) return;
+  const por = parseFloat($('f-porcaja').value) || 0;
+  const nombre = $('f-nombrecaja').value.trim();
+  const um = $('f-um').value.trim() || 'Unidad';
+  const antes = sel.value;
+  sel.style.display = por > 0 ? '' : 'none';
+  sel.innerHTML = por <= 0 ? '' :
+    '<option value="unidad">' + esc(enPlural(um)) + '</option>' +
+    '<option value="caja">' + esc((nombre || 'Caja') + ' (de ' + por + ')') + '</option>';
+  sel.value = (por > 0 && antes === 'caja') ? 'caja' : 'unidad';
+  alPonerStockInicial();
+}
+const medidaDelStock = () => {
+  const sel = $('f-existencia-medida');
+  return (sel && sel.style.display !== 'none') ? sel.value : 'unidad';
+};
+
+// Lo que se va a guardar, dicho ANTES de guardarlo: «10 sacos = 1 000 libras». Sin
+// eso hay que fiarse de una multiplicación hecha de cabeza, que es justo lo que
+// esto viene a quitar.
+function alPonerStockInicial() {
+  const caja = $('f-existencia-cuenta');
+  if (!caja) return;
+  const escrito = parseFloat($('f-existencia').value);
+  const por = parseFloat($('f-porcaja').value) || 0;
+  const um = ($('f-um').value.trim() || 'unidad').toLowerCase();
+  const nombre = ($('f-nombrecaja').value.trim() || 'caja').toLowerCase();
+  if (medidaDelStock() !== 'caja' || isNaN(escrito) || escrito <= 0 || por <= 0) {
+    caja.innerHTML = '';
+    return;
+  }
+  caja.innerHTML = '<b>' + escrito + ' ' + esc(escrito === 1 ? nombre : enPlural(nombre)) +
+    ' = ' + (escrito * por) + ' ' + esc(enPlural(um)) + '</b>';
 }
 
 async function guardarProducto() {
@@ -794,14 +857,19 @@ async function guardarProducto() {
   try {
     if (editando) {
       await api('/api/productos/' + editando, { method: 'PUT', body: JSON.stringify(cuerpo) });
-      toast('✓ Producto actualizado');
+      // Y si es un producto que todavía no había tenido mercancía y acaba de
+      // recibir local y cantidad, se apunta la entrada igual que al crearlo.
+      const aviso = await apuntarExistenciaInicial(editando, cuerpo.costo, existencia,
+                                                   localDeLaFicha(), medidaDelStock());
+      if (aviso && aviso.mal) alert(aviso.texto);
+      else toast(aviso ? '✓ Guardado. ' + aviso.texto : '✓ Producto actualizado');
     } else {
       const r = await api('/api/productos', { method: 'POST', body: JSON.stringify(cuerpo) });
       // La existencia con la que nace el producto es una ENTRADA, no un campo
       // suyo (#1), y va después de crearlo porque hasta aquí no hay a qué
       // producto apuntarla.
       const aviso = await apuntarExistenciaInicial(r.id, cuerpo.costo, existencia,
-                                                   localDeLaFicha());
+                                                   localDeLaFicha(), medidaDelStock());
       // Sin impresora, este código hay que escribirlo a mano en el producto. Si
       // solo saliera en un aviso que se va solo, habría que buscarlo después.
       cerrarFicha();
@@ -814,6 +882,9 @@ async function guardarProducto() {
     }
     cerrarFicha();
     await cargarCatalogo();
+    // El almacén puede haberse quedado viejo: al arreglar un producto sin estrenar
+    // acaba de entrar mercancía.
+    if ($('p-almacen').classList.contains('activa')) await cargarAlmacen();
   } catch (e) { alert('No se pudo guardar: ' + e.message); }
 }
 
@@ -838,7 +909,7 @@ function existenciaEscrita() {
 // La entrada va al local del PRODUCTO, no al que se esté mirando: desde el almacén
 // principal se crean cosas que son de una tienda, y meterlas en el almacén las
 // dejaría contadas donde no están (#45).
-async function apuntarExistenciaInicial(productoId, costoBase, cantidad, sitioId) {
+async function apuntarExistenciaInicial(productoId, costoBase, cantidad, sitioId, medida) {
   if (!(cantidad > 0) || !sitioId) return null;
   const donde = (SITIOS.find(s => s.id === sitioId) || {}).nombre || 'el sitio';
   try {
@@ -847,6 +918,8 @@ async function apuntarExistenciaInicial(productoId, costoBase, cantidad, sitioId
       sitio_id: sitioId,
       producto_id: productoId,
       cantidad,
+      // En unidades o en bultos: la cuenta la hace el servidor (#44).
+      medida: medida || 'unidad',
       costo_unit: costoBase,
       obs: 'Existencia con la que se dio de alta el producto',
       fecha: new Date().toLocaleDateString('sv-SE')

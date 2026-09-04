@@ -2240,6 +2240,74 @@ se está aplicando de verdad.
 
 ---
 
+## 49. El stock con el que empieza un producto: en sacos, y también después
+
+Contado por el dueño el **4 de septiembre de 2026**, estrenando lo de la #48: «creé
+el producto saco de harina de 100kg y **puse en stock 10 sacos**, lo asigné a
+almacén, y en almacén me sale que hay **cero unidades** cuando deberían estar las
+10».
+
+Se reprodujo su camino exacto en la propia pantalla, y salieron **dos fallos
+distintos**, los dos míos y los dos nacidos de la #48.
+
+### 1. Creando desde el mirador, la casilla del stock no salía nunca más
+
+La #48 dejó el mirador sin local propuesto: al crear un producto desde ahí, el
+desplegable arranca en **«todavía sin local»**, y con él la casilla del stock
+**desaparece** —correcto: no hay dónde meter la mercancía—. Pero la #45 solo
+preguntaba la existencia **al crear**, así que cuando después se abría el producto
+para asignarle el almacén, la casilla **ya no volvía**. No quedaba ninguna forma de
+decir cuánto hay salvo ir a Almacén → Entrada, que él no tenía por qué adivinar.
+
+**Ahora la pregunta sigue estando mientras el producto no haya tenido mercancía en
+ningún local**, y lo dice: «este producto todavía no ha tenido mercancía en ningún
+local». Es el mismo estreno, solo que más tarde.
+
+**Y en cuanto tenga un solo movimiento suyo, desaparece para siempre.** Eso no es
+una restricción arbitraria: escribir ahí un número cuando ya hay historial sería
+pisarlo (#2). La marca es `p.sitios` —los locales donde ha habido movimiento—, que
+el servidor ya calculaba para la #45.
+
+### 2. «10» quería decir dos cosas distintas en dos pantallas
+
+En una entrada del almacén se puede escribir **«10 sacos»** y el servidor
+multiplica por cien (#44). En la casilla del stock de la ficha, no: ahí un 10 eran
+diez **libras sueltas**. La misma cifra, escrita a dos dedos de distancia,
+significaba cien veces menos.
+
+Eso no es una preferencia, es un fallo: **una cantidad tiene que querer decir lo
+mismo en toda la aplicación.** Ahora la casilla lleva su desplegable de medida, con
+las mismas dos opciones que la entrada, y **solo sale si el producto viene en
+bultos** —para los demás, ofrecer «cajas» sería ofrecer una forma de equivocarse—.
+
+**La lista se rehace cada vez que se toca el bulto**, y no solo al abrir la ficha:
+el bulto se está editando en esa MISMA pantalla, así que elegir «saco de 100» tiene
+que poder cambiar al momento en qué se escribe la cantidad.
+
+**La multiplicación la hace el servidor**, como en todos los demás caminos (#44).
+La pantalla solo la **dice en voz alta antes de guardar**: «10 sacos = 1 000
+libras». Sin esa línea hay que fiarse de una cuenta hecha de cabeza, que es
+justamente lo que el bulto viene a quitar.
+
+### Lo que enseña este fallo
+
+**Una casilla que solo existe en un momento se convierte en una trampa el día que
+ese momento cambia.** La #45 ató la pregunta al acto de crear; la #48 cambió qué
+pasa al crear desde el mirador, y la pregunta se quedó sin momento. Ninguna de las
+dos estaba mal por su cuenta.
+
+**Y ninguna prueba lo cazó**, porque las dos decisiones estaban probadas por
+separado y en verde. Lo cazó él, usándola. Por eso el banco ahora comprueba las
+dos mitades juntas: que la pregunta vuelve al asignar el local, y que **no vuelve**
+en cuanto hay un movimiento.
+
+`pruebas/locales.js` sube a **95 comprobaciones**. Y de paso se arregló su
+formulario de mentira, donde una casilla nacía **sin** `value` en vez de con el
+valor vacío: la prueba se rompía con un error en vez de comprobar nada, que es la
+peor forma de fallar.
+
+---
+
 ## Cuatro cosas que la aplicación da por hechas y nadie ha confirmado
 
 Lo de aquí abajo **no se ha hablado nunca con el dueño de D´Padrones**: venía
